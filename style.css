@@ -97,3 +97,42 @@ body.lightTheme .detailTools select{background:#fff;color:#182033;border-color:#
 body.lightTheme .primary{color:#fff}
 body.lightTheme .pos{color:#15966d}body.lightTheme .neg{color:#df4053}
 body.lightTheme .syncing{color:#9b7100}body.lightTheme .ok{color:#15966d}body.lightTheme .error{color:#df4053}
+
+/* Ver.8.14.1 スマホ表示追加修正 */
+.calendar,.weekday{grid-template-columns:repeat(7,minmax(0,1fr));min-width:0;width:100%}
+.calendar .day,.calendar .empty{min-width:0;width:100%}
+.calendar .day{overflow:hidden}
+@media(max-width:650px){
+  .card{padding:10px}
+  .weekday,.calendar{gap:3px}
+  .calendar .day,.calendar .empty{min-height:64px}
+  .day{padding:4px 2px;border-radius:9px}
+  .day .date{font-size:11px;text-align:center}
+  .day .daynet{
+    font-size:8px;
+    letter-spacing:-.35px;
+    line-height:1.15;
+    white-space:nowrap;
+    overflow:visible;
+    text-align:center;
+    width:122%;
+    margin-left:-11%;
+    transform:scaleX(.82);
+    transform-origin:center;
+  }
+  /* iOS Safari native month control can retain a large intrinsic width. */
+  .filters>label{min-width:0;width:100%;display:block}
+  .filters select,.filters input{min-width:0;max-width:100%;width:100%;display:block}
+  #periodMonth,#periodYear{box-sizing:border-box;min-width:0!important;max-width:100%!important;width:100%!important;}
+  #analysisTargetWrap{min-width:0;width:100%}
+  #entryDialog{overflow-x:hidden;overscroll-behavior-x:none}
+  #entryDialog,#entryDialog form,#entryDialog .entryRow,#entryDialog .two,#entryDialog .batchTotal,#entryDialog .dialogActions{min-width:0;max-width:100%;width:100%}
+  #entryDialog *{min-width:0;max-width:100%}
+  #entryDialog .dialogHead h2{overflow-wrap:anywhere}
+  #entryDialog .machineSearchRow{width:100%;min-width:0}
+  #entryDialog .machineSearchRow input{flex:1 1 auto;width:0;min-width:0}
+  #entryDialog .machineSearchRow button{flex:0 0 42px;width:42px}
+  #entryDialog .dialogActions{overflow:hidden}
+  #entryDialog .dialogActions button{flex:1 1 auto;min-width:0;white-space:nowrap}
+  #entryDialog .dialogActions .danger{flex:0 0 auto}
+}
