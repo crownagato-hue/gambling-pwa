@@ -35,3 +35,65 @@
  .detailTools select{max-width:none;flex:1;min-width:0}
  #addFromStats{flex:0 0 auto}
 }
+
+
+/* Ver.8.14 スマホUI最適化・ライトテーマ */
+html{overflow-x:hidden}body{overflow-x:hidden;max-width:100%;-webkit-text-size-adjust:100%}img,canvas,svg{max-width:100%}button,input,select,textarea{max-width:100%}
+.themeSwitch{display:grid;grid-template-columns:1fr 1fr;gap:10px}.themeBtn{min-height:48px;border:1px solid #303c55;background:#20283b;font-weight:700}.themeBtn.active{background:#6757d9;color:#fff;border-color:#7b6df0}
+@media(max-width:650px){
+  html,body{width:100%;overflow-x:hidden}
+  main{width:100%;max-width:100%;overflow-x:hidden}
+  .card,.summary>div,.machineCard,.entryRow{max-width:100%;min-width:0}
+  .entryRow{padding:12px;margin-left:0;margin-right:0}
+  .machineSearchRow{min-width:0}.machineSearchRow input{min-width:0}
+  .two{grid-template-columns:1fr;gap:8px}
+  .entryRow label,.entryRow select,.entryRow input,.entryRow textarea{min-width:0}
+  /* iOS Safari zoom prevention: controls smaller than 16px trigger automatic zoom. */
+  input,select,textarea{font-size:16px!important}
+  .machineSearchRow button,.dialogHead button,.dialogActions button,.removeRow,.carryBtn,.customRowBtn{font-size:16px}
+  dialog{width:calc(100% - 16px);max-width:calc(100% - 16px);max-height:calc(100dvh - 24px);margin:auto;overflow:auto;padding:12px;border-radius:16px}
+  #entryForm{width:100%;min-width:0}
+  .dialogActions{gap:6px;flex-wrap:wrap;padding-bottom:env(safe-area-inset-bottom)}
+  .dialogActions button{min-height:44px}
+  .dialogActions .danger{margin-right:auto}
+  .bottomNav{padding-bottom:max(8px,env(safe-area-inset-bottom));height:calc(68px + env(safe-area-inset-bottom));}
+  .themeSwitch{grid-template-columns:1fr 1fr}
+}
+
+body.lightTheme{background:#f4f6fb;color:#182033}
+body.lightTheme .topbar{background:rgba(244,246,251,.92);border-bottom-color:#d8deea}
+body.lightTheme .topbar h1{color:#182033}
+body.lightTheme .topnav .tab{color:#5c6780;border-color:#cbd3e2}
+body.lightTheme .topnav .tab.active{background:#dfe5f3;color:#182033;border-color:#bcc7da}
+body.lightTheme button{background:#e7ebf3;color:#263047}
+body.lightTheme .tab.active{background:#dce3f4;color:#182033}
+body.lightTheme .summary>div,body.lightTheme .card,body.lightTheme .machineCard{background:#fff;border-color:#d6ddea}
+body.lightTheme .summary span,body.lightTheme .reportHero span,body.lightTheme .filters label,body.lightTheme .settingsNote{color:#66728b}
+body.lightTheme .card h2,body.lightTheme .card h3,body.lightTheme .monthbar h2,body.lightTheme .reportHead h2{color:#182033}
+body.lightTheme select,body.lightTheme input,body.lightTheme textarea{background:#fff;color:#182033;border-color:#cbd3e2;color-scheme:light}
+body.lightTheme .filters select,body.lightTheme .filters input{color-scheme:light}
+body.lightTheme .day{background:#f8faff;border-color:#d5dcea}
+body.lightTheme .day.zero{background:#f3f5fa}
+body.lightTheme .day.win{background:#e8f8f2;border-color:#a7ddca}
+body.lightTheme .day.lose{background:#fdecef;border-color:#efb7c1}
+body.lightTheme .weekday{color:#6d7890}
+body.lightTheme .day .date{color:#66728b}
+body.lightTheme .day .daynet{color:#253049}
+body.lightTheme .today{outline-color:#7667e8}
+body.lightTheme .listRow{border-bottom-color:#dbe1eb}
+body.lightTheme .listMain small,body.lightTheme .reportHead span,body.lightTheme .reportMachine small,body.lightTheme .entryTop small,body.lightTheme .recentLabel{color:#6b7690}
+body.lightTheme .reportMachine,body.lightTheme .entryCard,body.lightTheme .backupInfo,body.lightTheme .syncSource,body.lightTheme .batchNotice,body.lightTheme .netPreview,body.lightTheme .statsGrid div{background:#f5f7fb;border-color:#d8deea;color:#263047}
+body.lightTheme .smallText,body.lightTheme .neutral{color:#6b7690}
+body.lightTheme .ghost,body.lightTheme .recentMachine{background:#e8ecf4;border-color:#cbd3e2;color:#263047}
+body.lightTheme .bottomNav{background:rgba(244,246,251,.95);border-top-color:#d1d8e6}
+body.lightTheme .bottomNav .tab{color:#69748c}
+body.lightTheme .bottomNav .tab.active{background:#dce3f4;color:#182033}
+body.lightTheme .themeBtn{background:#e8ecf4;border-color:#cbd3e2;color:#263047}
+body.lightTheme .themeBtn.active{background:#6757d9;color:#fff;border-color:#6757d9}
+body.lightTheme dialog{background:#fff;color:#182033;border-color:#cbd3e2}
+body.lightTheme dialog::backdrop{background:rgba(20,28,45,.38)}
+body.lightTheme .dialogActions{background:#fff}
+body.lightTheme .detailTools select{background:#fff;color:#182033;border-color:#cbd3e2;color-scheme:light}
+body.lightTheme .primary{color:#fff}
+body.lightTheme .pos{color:#15966d}body.lightTheme .neg{color:#df4053}
+body.lightTheme .syncing{color:#9b7100}body.lightTheme .ok{color:#15966d}body.lightTheme .error{color:#df4053}

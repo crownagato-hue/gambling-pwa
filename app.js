@@ -56,6 +56,18 @@ function autoMachineUpdate(){
 }
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const THEME_KEY="gambling-theme-v1";
+function applyTheme(theme){
+  const light=theme==='light';
+  document.body.classList.toggle('lightTheme',light);
+  const meta=$('#themeColorMeta'); if(meta)meta.setAttribute('content',light?'#f4f6fb':'#0b1020');
+  const label=$('#themeLabel'); if(label)label.textContent=light?'ライト':'ダーク';
+  const dark=$('#themeDark'), lite=$('#themeLight');
+  if(dark)dark.classList.toggle('active',!light);
+  if(lite)lite.classList.toggle('active',light);
+  localStorage.setItem(THEME_KEY,light?'light':'dark');
+}
+function loadTheme(){applyTheme(localStorage.getItem(THEME_KEY)==='light'?'light':'dark')}
 const yen=n=>"¥"+Math.round(n||0).toLocaleString("ja-JP");
 const RATE_OPTIONS={"パチスロ":[20,10,5],"パチンコ":[4,2,1,0.5]};
 function unitFor(genre){return genre==='パチスロ'?'枚':genre==='パチンコ'?'玉':'円'}
@@ -312,8 +324,10 @@ $("#reportPrev").onclick=()=>{reportDate.setDate(reportDate.getDate()-1);renderR
 $("#period").onchange=()=>{updatePeriodControls();renderStats()};$("#periodMonth").onchange=renderStats;$("#periodYear").onchange=renderStats;$("#group").onchange=()=>{renderStats();};$("#analysisTarget").onchange=renderStats;$("#detailSort").onchange=renderStats;
 $$('.tab').forEach(b=>b.onclick=()=>{switchPage(b.dataset.page);renderAll();if(b.dataset.page==='settings')updateMachineUpdatedUI()});
 $("#updateMachines").onclick=()=>updateMachineData(false);$("#exportData").onclick=exportBackup;$("#importData").onchange=e=>importBackup(e.target.files[0]);
+$("#themeDark").onclick=()=>applyTheme('dark');$("#themeLight").onclick=()=>applyTheme('light');
 window.addEventListener('online',()=>setMachineStatus('オンライン','ok'));window.addEventListener('offline',()=>setMachineStatus('オフライン：保存済みデータを使用','neutral'));
 // 8.2: 初期描画より先にイベントを登録。初期描画中に別処理が失敗しても「＋ 記録」が無反応にならないようにします。
+loadTheme();
 loadMachineData();
 updateCustomMachineCount();
 setupPeriodSelectors();
