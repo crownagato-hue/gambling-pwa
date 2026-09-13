@@ -1,0 +1,10 @@
+{
+  "name": "ギャンブル収支管理",
+  "short_name": "収支管理",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#111827",
+  "lang": "ja",
+  "icons": []
+}
