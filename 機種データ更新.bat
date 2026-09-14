@@ -4,16 +4,18 @@ cd /d "%~dp0"
 chcp 65001 >nul
 
 echo ============================================
-echo   P-WORLD 機種データ更新 Ver8.16.2
+echo   P-WORLD 機種データ更新 Ver8.17
 echo ============================================
 echo.
 echo P-WORLDから最新機種情報を取得します。
+echo 1～20ページ：設置店舗数100件以上
+echo 21～50ページ：設置店舗数500件以上
 echo 取得失敗時は machine-data.json を変更しません。
 echo.
 
 where py >nul 2>&1
 if %errorlevel%==0 (
-  py -3 update_machine_data.py
+  py -3 update_machine_data.py --pages 50
   set "RC=%errorlevel%"
   goto END
 )

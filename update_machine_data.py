@@ -159,7 +159,7 @@ def clean_machine_name(name: str) -> str:
     return name
 
 
-def extract_rows(html_text):
+def extract_rows(html_text, page_no=1):
     parser=RowParser(); parser.feed(html_text)
     out={"パチスロ":[],"パチンコ":[]}
     for row in parser.rows:
@@ -170,8 +170,22 @@ def extract_rows(html_text):
         if not kind:
             continue
         # P-WORLD一覧の標準構造では2番目のセルが機種名。
-        name=cells[1] if len(cells)>=2 else ""
-        name=clean_machine_name(name)
+        raw_name=cells[1] if len(cells)>=2 else ""
+        # P-WORLDでは「機種名」と「設置店舗数」が連結されることがある。
+        # 末尾の数字+件を店舗数として取り出してから機種名を整える。
+        m_count=re.search(r"([0-9][0-9,]*)件$", raw_name)
+        if not m_count:
+            continue
+        store_count=int(m_count.group(1).replace(",", ""))
+
+        # ページ範囲ごとの採用基準
+        # 1～20ページ: 100件以上
+        # 21～50ページ: 500件以上
+        min_count=100 if page_no <= 20 else 500
+        if store_count < min_count:
+            continue
+
+        name=clean_machine_name(raw_name)
         if not name or re.fullmatch(r"[0-9,]+件",name) or re.fullmatch(r"\d+",name):
             continue
         # 念のためページ番号や種別等を除外
@@ -197,7 +211,9 @@ def extract_machine_names_from_index(page_html):
 def get_latest_pages(pages:int, delay:float):
     result={"パチスロ":[],"パチンコ":[]}
     total=None
+    pages=min(pages,50)
     for i in range(pages):
+        page_no=i+1
         start=i*50
         qs=urlencode({"aflag":"","key":"","mode":"4","start":start})
         url=BASE+"?"+qs
@@ -209,7 +225,7 @@ def get_latest_pages(pages:int, delay:float):
             continue
         m=re.search(r"全([0-9,]+)件",txt)
         if m: total=int(m.group(1).replace(",",""))
-        got=extract_rows(txt)
+        got=extract_rows(txt, page_no)
         if not any(got.values()):
             # HTML構造が変わった場合に最低限のフォールバック
             links=extract_machine_names_from_index(txt)
@@ -234,12 +250,15 @@ def load_existing(path:Path):
 
 def main():
     ap=argparse.ArgumentParser(description="P-WORLDから機種マスターを更新します")
-    ap.add_argument("--pages",type=int,default=8,help="最新順の取得ページ数(1ページ50件、既定8=最大400件)")
+    ap.add_argument("--pages",type=int,default=50,help="最新順の取得ページ数(1ページ50件、最大50ページ=最大2500件)")
     ap.add_argument("--delay",type=float,default=1.0,help="リクエスト間隔(秒)")
     ap.add_argument("--keep-existing",action="store_true",help="既存machine-data.jsonの機種を削除せずマージ")
     ap.add_argument("--dry-run",action="store_true",help="JSONを書き換えず件数だけ確認")
     args=ap.parse_args()
     if args.pages<1: ap.error("--pages は1以上")
+    if args.pages>50:
+        print("--pages は最大50ページです。50ページに制限します。")
+        args.pages=50
     root=Path(__file__).resolve().parent
     target=root/"machine-data.json"
     existing=load_existing(target)
@@ -253,11 +272,15 @@ def main():
             data[k]=list(dict.fromkeys(data[k]+[x for x in existing.get(k,[]) if isinstance(x,str)]))
     now=datetime.now(JST)
     stamp=now.strftime("%Y%m%d-%H%M%S")
-    version="8.16.2-machine-"+stamp
+    version="8.17-machine-"+stamp
     payload={
         "version":version,
         "updatedAt":now.isoformat(timespec="seconds"),
-        "source":"P-WORLD掲載機種情報（最新順インデックス）をPC側Updaterで取得",
+        "source":"P-WORLD掲載機種情報（最新順インデックス）をPC側Updaterで取得・ページ別設置店舗数フィルター適用",
+        "filterRules":[
+            {"pages":"1-20","minStoreCount":100},
+            {"pages":"21-50","minStoreCount":500}
+        ],
         "sourceUrl":BASE,
         "fetchedPages":args.pages,
         "pworldTotalAtFetch":total,
