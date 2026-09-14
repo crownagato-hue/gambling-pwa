@@ -205,7 +205,7 @@ function drawChart(canvas,data){
  canvas.width=cssW*dpr;canvas.height=h*dpr;
  const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,cssW,h);
  if(!data.length){ctx.fillStyle="#8793aa";ctx.font="12px system-ui";ctx.fillText("データがありません",12,28);return;}
- const padL=48,padR=14,padT=16,padB=30,w=cssW;
+ const padL=66,padR=14,padT=16,padB=30,w=cssW;
  const vals=data.map(x=>x.value),scale=chartScale(vals),min=scale.min,max=scale.max,step=scale.step;
  const plotW=w-padL-padR,plotH=h-padT-padB;
  const x=i=>padL+plotW*(data.length===1?0.5:i/(data.length-1));
@@ -231,7 +231,20 @@ function drawChart(canvas,data){
  ctx.textAlign="center";ctx.fillStyle="#8793aa";
  const labeled=data.map((p,i)=>({p,i})).filter(o=>o.p.label);
  if(labeled.length<=10){labeled.forEach(({p,i})=>ctx.fillText(p.label,x(i),h-8));}
- else{const every=Math.max(1,Math.ceil(labeled.length/8));labeled.forEach(({p,i},j)=>{if(j===0||j===labeled.length-1||j%every===0)ctx.fillText(p.label,x(i),h-8);});}
+ else{
+  const every=Math.max(1,Math.ceil(labeled.length/8));
+  const candidates=labeled.filter((o,j)=>j===0||j===labeled.length-1||j%every===0);
+  const minLabelGap=Math.max(42,Math.min(70,plotW/7));
+  const placed=[];
+  candidates.forEach((o)=>{
+    if(!placed.length || x(o.i)-x(placed[placed.length-1].i)>=minLabelGap) placed.push(o);
+    else if(o===candidates[candidates.length-1]){
+      placed.pop();
+      if(!placed.length || x(o.i)-x(placed[placed.length-1].i)>=minLabelGap) placed.push(o);
+    }
+  });
+  placed.forEach(({p,i})=>ctx.fillText(p.label,x(i),h-8));
+}
 }
 
 function exportBackup(){

@@ -136,3 +136,64 @@ body.lightTheme .syncing{color:#9b7100}body.lightTheme .ok{color:#15966d}body.li
   #entryDialog .dialogActions button{flex:1 1 auto;min-width:0;white-space:nowrap}
   #entryDialog .dialogActions .danger{flex:0 0 auto}
 }
+
+
+/* Ver.8.14.2 グラフ・分析・入力画面のスマホ表示修正 */
+.detailHead{align-items:center}
+
+/* グラフ：縦軸の「¥」が切れないよう左余白を確保 */
+@media(max-width:650px){
+  .detailHead{display:block}
+  .detailHead .detailTools{
+    width:100%;
+    margin-top:10px;
+    display:flex;
+    align-items:stretch;
+    justify-content:stretch;
+    gap:8px;
+  }
+  .detailHead .detailTools select{
+    flex:1 1 auto;
+    width:100%;
+    max-width:none;
+    min-width:0;
+  }
+  .detailHead #addFromStats{
+    flex:0 0 92px;
+    width:92px;
+  }
+
+  /* iOSのmonth/date入力の固有幅を抑えてカード内に収める */
+  #periodMonth,
+  #periodYear,
+  #entryDate{
+    display:block;
+    box-sizing:border-box;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    margin-left:0;
+    margin-right:0;
+    overflow:hidden;
+  }
+  #periodMonth,
+  #entryDate{
+    appearance:none;
+    -webkit-appearance:none;
+    text-align:center;
+    padding-left:12px;
+    padding-right:12px;
+  }
+
+  /* 日付選択を含むlabel自体の幅も固定 */
+  #entryForm>label,
+  #entryForm>label:first-of-type{
+    display:block;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    overflow:hidden;
+  }
+
+  /* グラフの縦軸ラベル用の余白はJS側で調整 */
+}
