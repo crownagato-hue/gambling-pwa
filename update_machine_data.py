@@ -148,6 +148,17 @@ def classify(row):
         return "パチンコ"
     return None
 
+def clean_machine_name(name: str) -> str:
+    """P-WORLDの一覧では機種名の末尾に設置店舗数が連結されることがある。
+    例: 「スマスロ タコスロ142件」→「スマスロ タコスロ」
+    数字を機種名から無差別に消さず、末尾の「数字+件」だけを除去する。
+    """
+    name=norm(name)
+    name=re.sub(r"(?:[0-9][0-9,]*)件$", "", name).strip()
+    name=re.sub(r"\s+(?:[0-9][0-9,]*)件$", "", name).strip()
+    return name
+
+
 def extract_rows(html_text):
     parser=RowParser(); parser.feed(html_text)
     out={"パチスロ":[],"パチンコ":[]}
@@ -160,6 +171,7 @@ def extract_rows(html_text):
             continue
         # P-WORLD一覧の標準構造では2番目のセルが機種名。
         name=cells[1] if len(cells)>=2 else ""
+        name=clean_machine_name(name)
         if not name or re.fullmatch(r"[0-9,]+件",name) or re.fullmatch(r"\d+",name):
             continue
         # 念のためページ番号や種別等を除外
@@ -241,7 +253,7 @@ def main():
             data[k]=list(dict.fromkeys(data[k]+[x for x in existing.get(k,[]) if isinstance(x,str)]))
     now=datetime.now(JST)
     stamp=now.strftime("%Y%m%d-%H%M%S")
-    version="8.16.1-machine-"+stamp
+    version="8.16.2-machine-"+stamp
     payload={
         "version":version,
         "updatedAt":now.isoformat(timespec="seconds"),
