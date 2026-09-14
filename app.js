@@ -22,7 +22,7 @@ const MACHINE_UPDATED_KEY="gambling-machine-updated-at";
 const MACHINE_VERSION_KEY="gambling-machine-data-version";
 const MACHINE_REMOTE_URL="machine-data.json";
 const MACHINE_UPDATE_SESSION_KEY="gambling-machine-update-session-v1";
-const APP_VERSION="8.17";
+const APP_VERSION="8.19";
 
 function loadMachineData(){
   try{
