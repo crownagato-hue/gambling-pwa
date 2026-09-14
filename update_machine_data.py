@@ -95,41 +95,78 @@ def norm(s:str)->str:
 
 
 def fetch(url:str, timeout=25)->str:
-    req=Request(url,headers={"User-Agent":USER_AGENT,"Accept-Language":"ja,en;q=0.8"})
+    """P-WORLDは環境によってShift_JIS/CP932系で返ることがあるため、
+    Content-Type/meta charsetを見てから日本語をデコードする。"""
+    req=Request(url,headers={
+        "User-Agent":USER_AGENT,
+        "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language":"ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer":"https://www.p-world.co.jp/",
+        "Cache-Control":"no-cache",
+    })
     with urlopen(req,timeout=timeout) as r:
-        return r.read().decode("utf-8","ignore")
+        raw=r.read()
+        header_charset=r.headers.get_content_charset()
+        content_type=r.headers.get("Content-Type","")
+    charset=header_charset
+    if not charset:
+        m=re.search(rb"charset\s*=\s*[\"']?([A-Za-z0-9._-]+)",raw[:10000],re.I)
+        if m:
+            charset=m.group(1).decode("ascii","ignore")
+    candidates=[]
+    if charset: candidates.append(charset)
+    candidates += ["utf-8","cp932","shift_jis"]
+    for enc in dict.fromkeys(candidates):
+        try:
+            text=raw.decode(enc)
+            # 日本語ページなら機種/機種名などが含まれる。誤デコードを弾く。
+            if "P-WORLD" in text or "機種を探す" in text or "パチスロ" in text:
+                return text
+        except (LookupError,UnicodeDecodeError):
+            pass
+    return raw.decode(candidates[0] if candidates else "utf-8","replace")
 
 
 def classify(row):
-    s=" ".join(row)
-    if "パチスロ" in s:
+    """P-WORLDの一覧行は概ね [番号, 機種名, 件数, 種別, メーカー]。
+    種別を基準に分類し、パチスロ以外の遊技機はパチンコ側へ入れる。"""
+    cells=[norm(x) for x in row if norm(x)]
+    if not cells:
+        return None
+    if "パチスロ" in cells:
         return "パチスロ"
-    # P-WORLDの機種インデックスでパチンコ側に現れる代表的な分類
-    if any(x in s for x in ("デジパチ","確率変動デジパチ","羽根物","一般電役","権利物","スマパチ")):
+    pachinko_types={
+        "デジパチ","確率変動デジパチ","羽根物","一般電役","権利物",
+        "権利物その他","スマパチ","アレンジボール","じゃん球",
+        "電役デジパチ","その他"
+    }
+    if any(x in pachinko_types for x in cells):
+        return "パチンコ"
+    # 一覧ページの行で、パチスロと明記されていないものは
+    # 機種行であることを確認できた場合のみパチンコ扱い。
+    if len(cells)>=4 and re.fullmatch(r"\d+",cells[0]) and re.search(r"件$",cells[2]):
         return "パチンコ"
     return None
-
 
 def extract_rows(html_text):
     parser=RowParser(); parser.feed(html_text)
     out={"パチスロ":[],"パチンコ":[]}
     for row in parser.rows:
-        kind=classify(row)
-        if not kind: continue
-        # 機種名は行内で比較的長いセルを優先。件数やメーカー名を除外。
-        candidates=[]
-        for cell in row:
-            cell=norm(cell)
-            if not cell or re.fullmatch(r"[0-9,]+件",cell): continue
-            if cell in ("パチスロ","デジパチ","確率変動デジパチ","羽根物","一般電役","権利物その他","権利物","スマパチ"): continue
-            if len(cell)>=2: candidates.append(cell)
-        if not candidates: continue
-        name=max(candidates,key=len)
-        # メーカー名が混ざった場合は除去できるだけ除去
-        if len(candidates)>=2 and name==candidates[-1] and len(candidates[-2])>len(name)*0.7:
-            name=candidates[-2]
-        name=norm(name)
-        if name and name not in out[kind]: out[kind].append(name)
+        cells=[norm(x) for x in row if norm(x)]
+        if len(cells)<4:
+            continue
+        kind=classify(cells)
+        if not kind:
+            continue
+        # P-WORLD一覧の標準構造では2番目のセルが機種名。
+        name=cells[1] if len(cells)>=2 else ""
+        if not name or re.fullmatch(r"[0-9,]+件",name) or re.fullmatch(r"\d+",name):
+            continue
+        # 念のためページ番号や種別等を除外
+        if name in {"パチスロ","デジパチ","確率変動デジパチ","羽根物","一般電役","権利物","権利物その他","スマパチ"}:
+            continue
+        if name not in out[kind]:
+            out[kind].append(name)
     return out
 
 
@@ -204,7 +241,7 @@ def main():
             data[k]=list(dict.fromkeys(data[k]+[x for x in existing.get(k,[]) if isinstance(x,str)]))
     now=datetime.now(JST)
     stamp=now.strftime("%Y%m%d-%H%M%S")
-    version="8.16.0-machine-"+stamp
+    version="8.16.1-machine-"+stamp
     payload={
         "version":version,
         "updatedAt":now.isoformat(timespec="seconds"),
@@ -216,6 +253,9 @@ def main():
         "パチンコ":data["パチンコ"]
     }
     print(f"取得結果: パチスロ {len(data['パチスロ'])} / パチンコ {len(data['パチンコ'])}")
+    if len(data["パチスロ"])+len(data["パチンコ"]) < 20:
+        print("取得件数が少なすぎるため、安全のためJSONは更新しません。", file=sys.stderr)
+        return 3
     if args.dry_run:
         return 0
     backup=target.with_name(f"machine-data.backup-{stamp}.json")
