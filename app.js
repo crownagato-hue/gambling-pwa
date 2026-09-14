@@ -16,13 +16,22 @@ const MACHINE_DATA={
   ]
 };
 
-const MACHINE_DATA_KEY="gambling-machine-data-v2";
+const MACHINE_DATA_KEY="gambling-machine-data-v3";
 const MACHINE_CUSTOM_KEY="gambling-machine-custom-v1";
 const MACHINE_UPDATED_KEY="gambling-machine-updated-at";
+const MACHINE_VERSION_KEY="gambling-machine-data-version";
 const MACHINE_REMOTE_URL="machine-data.json";
+const MACHINE_UPDATE_SESSION_KEY="gambling-machine-update-session-v1";
+const APP_VERSION="8.16";
 
 function loadMachineData(){
-  try{const cached=JSON.parse(localStorage.getItem(MACHINE_DATA_KEY)||"null"); if(cached&&cached.パチスロ&&cached.パチンコ){MACHINE_DATA.パチスロ=cached.パチスロ;MACHINE_DATA.パチンコ=cached.パチンコ;}}catch(e){}
+  try{
+    const cached=JSON.parse(localStorage.getItem(MACHINE_DATA_KEY)||"null");
+    if(cached&&Array.isArray(cached.パチスロ)&&Array.isArray(cached.パチンコ)){
+      MACHINE_DATA.パチスロ=cached.パチスロ;
+      MACHINE_DATA.パチンコ=cached.パチンコ;
+    }
+  }catch(e){}
   mergeCustomMachines();
 }
 function getCustomMachines(){try{const x=JSON.parse(localStorage.getItem(MACHINE_CUSTOM_KEY)||"{}" );return {パチスロ:Array.isArray(x.パチスロ)?x.パチスロ:[],パチンコ:Array.isArray(x.パチンコ)?x.パチンコ:[]};}catch(e){return {パチスロ:[],パチンコ:[]}}}
@@ -30,29 +39,47 @@ function mergeCustomMachines(){const c=getCustomMachines();for(const g of ["パ�
 function rememberCustomMachine(genre,name){if(!["パチスロ","パチンコ"].includes(genre)||!name)return;const c=getCustomMachines();if(!c[genre].includes(name))c[genre].push(name);localStorage.setItem(MACHINE_CUSTOM_KEY,JSON.stringify(c));mergeCustomMachines();updateCustomMachineCount()}
 function updateCustomMachineCount(){const el=$("#customMachineCount");if(!el)return;const c=getCustomMachines();el.textContent=`ユーザー追加：${c.パチスロ.length+c.パチンコ.length}機種`;}
 function setMachineStatus(text,cls="neutral"){const el=$("#machineSyncStatus"); if(el){el.textContent=text;el.className="smallText "+cls}}
-function machineUpdatedText(){const v=localStorage.getItem(MACHINE_UPDATED_KEY);return v?new Date(v).toLocaleString("ja-JP"):"未更新"}
+function machineUpdatedText(){const v=localStorage.getItem(MACHINE_UPDATED_KEY);return v?new Date(v).toLocaleString("ja-JP")+"（v"+(localStorage.getItem(MACHINE_VERSION_KEY)||"?")+"）":"未更新"}
 function updateMachineUpdatedUI(){const el=$("#machineUpdatedAt");if(el)el.textContent=machineUpdatedText()}
+function validMachineData(data){return data&&Array.isArray(data.パチスロ)&&Array.isArray(data.パチンコ)}
 async function updateMachineData(silent=false){
   if(!navigator.onLine){if(!silent)setMachineStatus("オフライン：保存済みデータを使用","neutral");return false}
-  if(!silent)setMachineStatus("機種データ確認中…","syncing");
+  if(!silent)setMachineStatus("最新の機種データを確認中…","syncing");
   try{
-    const res=await fetch(MACHINE_REMOTE_URL+"?v="+Date.now(),{cache:"no-store"});
+    const res=await fetch(MACHINE_REMOTE_URL+"?v="+Date.now(),{cache:"no-store",headers:{"Cache-Control":"no-cache"}});
     if(!res.ok)throw new Error("HTTP "+res.status);
     const data=await res.json();
-    if(!Array.isArray(data.パチスロ)||!Array.isArray(data.パチンコ))throw new Error("機種データ形式が不正です");
-    MACHINE_DATA.パチスロ=data.パチスロ;MACHINE_DATA.パチンコ=data.パチンコ;mergeCustomMachines();
-    localStorage.setItem(MACHINE_DATA_KEY,JSON.stringify(data));
-    localStorage.setItem(MACHINE_UPDATED_KEY,new Date().toISOString());
+    if(!validMachineData(data))throw new Error("機種データ形式が不正です");
+    const version=String(data.version||data.updatedAt||new Date().toISOString());
+    const oldVersion=localStorage.getItem(MACHINE_VERSION_KEY)||"";
+    MACHINE_DATA.パチスロ=[...new Set(data.パチスロ.filter(Boolean))];
+    MACHINE_DATA.パチンコ=[...new Set(data.パチンコ.filter(Boolean))];
+    mergeCustomMachines();
+    // 保存するのはリモートの純粋なマスター。ユーザー追加分は別キーで保持。
+    localStorage.setItem(MACHINE_DATA_KEY,JSON.stringify({version,updatedAt:data.updatedAt||new Date().toISOString(),source:data.source||"remote",パチスロ:data.パチスロ,パチンコ:data.パチンコ}));
+    localStorage.setItem(MACHINE_UPDATED_KEY,data.updatedAt||new Date().toISOString());
+    localStorage.setItem(MACHINE_VERSION_KEY,version);
     updateMachineUpdatedUI();
-    if(!silent){setMachineStatus("機種データを更新しました","ok");populateMachines($("#machineSearch")?.value||"");}
+    if(!silent){
+      const changed=oldVersion!==version;
+      setMachineStatus(changed?"機種データを更新しました":"最新データです","ok");
+      populateMachines($("#machineSearch")?.value||"");
+    }
     return true;
-  }catch(e){if(!silent)setMachineStatus("更新できません：保存済みデータを使用","error");return false}
+  }catch(e){
+    console.warn("機種データ更新失敗",e);
+    if(!silent)setMachineStatus("更新できません：保存済みデータを使用","error");
+    return false
+  }
 }
 function autoMachineUpdate(){
   updateMachineUpdatedUI();
-  const last=localStorage.getItem(MACHINE_UPDATED_KEY);
-  const due=!last || Date.now()-new Date(last).getTime()>24*60*60*1000;
-  if(navigator.onLine&&due)updateMachineData(true);
+  // 起動ごとに1回だけオンライン確認。Service Workerはmachine-data.jsonをネット優先にするため、
+  // 24時間キャッシュで新台を取りこぼす問題を避けます。
+  if(navigator.onLine&&!sessionStorage.getItem(MACHINE_UPDATE_SESSION_KEY)){
+    sessionStorage.setItem(MACHINE_UPDATE_SESSION_KEY,"1");
+    updateMachineData(true);
+  }
 }
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
