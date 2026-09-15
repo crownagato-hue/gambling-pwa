@@ -22,7 +22,7 @@ const MACHINE_UPDATED_KEY="gambling-machine-updated-at";
 const MACHINE_VERSION_KEY="gambling-machine-data-version";
 const MACHINE_REMOTE_URL="machine-data.json";
 const MACHINE_UPDATE_SESSION_KEY="gambling-machine-update-session-v1";
-const APP_VERSION="8.21";
+const APP_VERSION="8.22";
 
 function loadMachineData(){
   try{
@@ -294,7 +294,9 @@ function addEntryRow(data={}){
  const div=document.createElement("div");div.className="entryRow card";div.dataset.row=i;
  const genre0=data.genre||'パチスロ', rate0=Number(data.rate)||RATE_OPTIONS[genre0]?.[0]||1;
  const investType0=data.investType||'cash', returnType0=data.returnType||'cash';
- const investInput0=investType0==='cash'?cashInputValue(data.invest):Number(data.invest||0), returnInput0=returnType0==='cash'?cashInputValue(data.return):Number(data.return||0);
+ const hasInvest=Object.prototype.hasOwnProperty.call(data,'invest'), hasReturn=Object.prototype.hasOwnProperty.call(data,'return');
+ const investInput0=hasInvest?(investType0==='cash'?cashInputValue(data.invest):Number(data.invest??0)):'';
+ const returnInput0=hasReturn?(returnType0==='cash'?cashInputValue(data.return):Number(data.return??0)):'';
  div.innerHTML=`<div class="rowHead"><h3>機種 ${wrap.children.length+1}</h3><button type="button" class="removeRow danger" data-row="${i}">削除</button></div><label>ジャンル<select class="rowGenre" data-row="${i}"><option>パチスロ</option><option>パチンコ</option><option>競馬</option><option>競艇</option><option>その他</option></select></label><label>レート<select class="rowRate" data-row="${i}">${rateOptionsHtml(genre0,rate0)}</select></label><label>機種・対象</label>${rowMachinePickerHtml(i)}<div class="two"><label>投資<select class="rowInvestType"><option value="cash">現金（千円）</option><option value="hold">持ち玉（${unitFor(genre0)}）</option></select><input class="rowInvest" data-row="${i}" type="number" min="0" step="${inputStep(investType0)}" placeholder="${inputPlaceholder(investType0)}" value="${investInput0}" required></label><label>回収<select class="rowReturnType"><option value="cash">現金（千円）</option><option value="hold">持ち玉（${unitFor(genre0)}）</option></select><input class="rowReturn" data-row="${i}" type="number" min="0" step="${inputStep(returnType0)}" placeholder="${inputPlaceholder(returnType0)}" value="${returnInput0}" required></label></div><button type="button" class="ghost full carryBtn">← 前の機種の持ち玉を引き継ぐ</button><label>メモ<textarea class="rowMemo" data-row="${i}" rows="2">${escapeHtml(data.memo||"")}</textarea><div class="netPreview">収支（円換算） <strong class="rowNet" data-row="${i}">¥0</strong><small class="rowUnitPreview"></small></div>`;
  wrap.appendChild(div);
  const genre=div.querySelector('.rowGenre'),rate=div.querySelector('.rowRate'),investType=div.querySelector('.rowInvestType'),returnType=div.querySelector('.rowReturnType');genre.value=genre0;investType.value=data.investType||'cash';returnType.value=data.returnType||'cash';
