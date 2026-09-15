@@ -110,18 +110,19 @@ def norm(s:str)->str:
 
 
 def fetch(url:str, timeout=25)->str:
-    """P-WORLDページを取得する。レスポンスの文字コードを自動判定する。"""
+    """P-WORLDは環境によってShift_JIS/CP932系で返ることがあるため、
+    Content-Type/meta charsetを見てから日本語をデコードする。"""
     req=Request(url,headers={
         "User-Agent":USER_AGENT,
         "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language":"ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
         "Referer":"https://www.p-world.co.jp/",
         "Cache-Control":"no-cache",
-        "Pragma":"no-cache",
     })
     with urlopen(req,timeout=timeout) as r:
         raw=r.read()
         header_charset=r.headers.get_content_charset()
+        content_type=r.headers.get("Content-Type","")
     charset=header_charset
     if not charset:
         m=re.search(rb"charset\s*=\s*[\"']?([A-Za-z0-9._-]+)",raw[:10000],re.I)
@@ -133,6 +134,7 @@ def fetch(url:str, timeout=25)->str:
     for enc in dict.fromkeys(candidates):
         try:
             text=raw.decode(enc)
+            # 日本語ページなら機種/機種名などが含まれる。誤デコードを弾く。
             if "P-WORLD" in text or "機種を探す" in text or "パチスロ" in text:
                 return text
         except (LookupError,UnicodeDecodeError):
@@ -140,43 +142,34 @@ def fetch(url:str, timeout=25)->str:
     return raw.decode(candidates[0] if candidates else "utf-8","replace")
 
 
-def fetch_with_retry(url: str, attempts=3, timeout=25, label=""):
-    """一時的な通信失敗・空HTML・想定外レスポンスを数回リトライする。"""
-    last_error = None
-    for attempt in range(1, attempts + 1):
-        try:
-            text = fetch(url, timeout=timeout)
-            if len(text) < 500 or "P-WORLD" not in text:
-                raise ValueError(f"P-WORLDページとして認識できない応答 (length={len(text)})")
-            return text, attempt
-        except Exception as e:
-            last_error = e
-            if attempt < attempts:
-                wait = 1.0 * attempt
-                print(f"    -> リトライ {attempt}/{attempts-1}: {label or url} / {e}")
-                time.sleep(wait)
-    raise last_error
-
-
 def classify(row):
-    """P-WORLDの一覧行は概ね [番号, 機種名, 件数, 種別, メーカー]。
-    種別を基準に分類し、パチスロ以外の遊技機はパチンコ側へ入れる。"""
-    cells=[norm(x) for x in row if norm(x)]
-    if not cells:
+    """P-WORLD一覧の固定列から遊技種別を判定する。
+
+    現在の一覧は概ね [番号, 機種名, 店舗数(○件), 種別, メーカー]。
+    「パチスロ」という文字が行内のどこかにあるかではなく、
+    種別列そのものを基準にする。
+    """
+    cells = [norm(x) for x in row]
+    if len(cells) < 4:
         return None
+
+    # 通常の一覧では4列目が種別。多少列が増減した場合のみ全体検索へ。
+    type_cell = cells[3] if len(cells) > 3 else ""
+    if type_cell == "パチスロ":
+        return "パチスロ"
+
+    pachinko_types = {
+        "デジパチ", "確率変動デジパチ", "羽根物", "一般電役", "権利物",
+        "権利物その他", "スマパチ", "アレンジボール", "じゃん球",
+        "電役デジパチ", "その他"
+    }
+    if type_cell in pachinko_types:
+        return "パチンコ"
+
+    # 列位置が変わった場合の限定的フォールバック。
     if "パチスロ" in cells:
         return "パチスロ"
-    pachinko_types={
-        "デジパチ","確率変動デジパチ","羽根物","一般電役","権利物",
-        "権利物その他","スマパチ","アレンジボール","じゃん球",
-        "電役デジパチ","その他"
-    }
     if any(x in pachinko_types for x in cells):
-        return "パチンコ"
-    # 一覧ページの行で、パチスロと明記されていないものは
-    # 機種行であることを確認できた場合のみパチンコ扱い。
-    # Ver8.18ではインデックスの「○件」を判定条件に使わない。
-    if len(cells) >= 4 and re.fullmatch(r"\d+", cells[0]):
         return "パチンコ"
     return None
 
@@ -196,27 +189,30 @@ def extract_rows(html_text, page_no=1):
     parser = RowParser()
     parser.feed(html_text)
     out = {"パチスロ": [], "パチンコ": []}
+
     for row, links in parser.rows:
-        # 空セルを除去しても、元のセルとURLの対応関係を維持する。
         pairs = [(norm(row[i]), links[i] if i < len(links) else "") for i in range(len(row))]
         pairs = [(text, href) for text, href in pairs if text]
         cells = [text for text, _ in pairs]
         if len(cells) < 4:
             continue
+
+        # 一覧の先頭列が順位番号である行だけを機種行として扱う。
+        # これでヘッダー・ナビゲーション等のtrを誤採用しない。
+        if not re.fullmatch(r"\d+", cells[0]):
+            continue
+
         kind = classify(cells)
         if not kind:
             continue
 
-        raw_name = cells[1] if len(cells) >= 2 else ""
-        # 機種インデックスの「○件」はVer8.18では一切取得・判定しない。
-        # 機種名と一緒に表示される場合があるため、名前からだけ除去する。
+        # 機種名セルは2列目。リンクも同じセルから取得する。
+        raw_name = cells[1]
         name = clean_machine_name(raw_name)
         if not name or re.fullmatch(r"[0-9,]+件", name) or re.fullmatch(r"\d+", name):
             continue
-        if name in {"パチスロ", "デジパチ", "確率変動デジパチ", "羽根物", "一般電役", "権利物", "権利物その他", "スマパチ"}:
-            continue
 
-        # 2番目のセル（機種名）のリンクを機種詳細ページURLとして取得。
+        # 機種名セルのhrefを優先して取得。
         href = pairs[1][1] if len(pairs) > 1 else ""
         if href:
             href = urljoin(MACHINE_BASE, href)
@@ -228,58 +224,25 @@ def extract_rows(html_text, page_no=1):
             out[kind].append(item)
     return out
 
-
 def extract_store_count(machine_html: str):
-    """機種詳細ページの「設置店 ○○店舗」から設置店数を取得する。
-
-    P-WORLDの表示ゆれに備えて、設置店検索付近→本文全体の順で複数パターンを試す。
-    """
-    cleaned = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", machine_html, flags=re.I)
-    text = norm(cleaned)
+    """機種詳細ページの「設置店 ○○店舗」から設置店数を取得する。"""
+    text = norm(re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", machine_html, flags=re.I))
     patterns = [
         r"設置店\s*([0-9][0-9,]*)\s*店舗",
-        r"設置店[^0-9]{0,80}([0-9][0-9,]*)\s*店舗",
-        r"設置店検索[^0-9]{0,200}([0-9][0-9,]*)\s*店舗",
+        r"設置店[^0-9]{0,30}([0-9][0-9,]*)\s*店舗",
     ]
-    # 「設置店検索」から少し後ろに絞って最優先で探す。
-    pos = text.find("設置店検索")
-    if pos >= 0:
-        section = text[pos:pos + 1200]
-        for pattern in patterns:
-            m = re.search(pattern, section, re.I)
-            if m:
-                return int(m.group(1).replace(",", ""))
     for pattern in patterns:
         m = re.search(pattern, text, re.I)
         if m:
             return int(m.group(1).replace(",", ""))
 
-    plain = norm(re.sub(r"<[^>]+>", " ", machine_html))
+    # HTMLタグを除去した本文で拾えない場合の軽いフォールバック。
+    plain = re.sub(r"<[^>]+>", " ", machine_html)
+    plain = norm(plain)
     for pattern in patterns:
         m = re.search(pattern, plain, re.I)
         if m:
             return int(m.group(1).replace(",", ""))
-    return None
-
-
-def extract_halls_url(machine_html: str, machine_url: str):
-    """詳細ページの設置店リンクを優先して取得。見つからなければmachine_idから生成。"""
-    lp = LinkParser(); lp.feed(machine_html)
-    for href, text in lp.links:
-        if href and ("/halls" in href or "machine_id=" in href) and ("設置店" in text or "店舗" in text):
-            return urljoin(MACHINE_BASE, href)
-    m = re.search(r"/machine/database/(\d+)", machine_url)
-    if m:
-        return f"{MACHINE_BASE}/halls?machine_id={m.group(1)}"
-    return None
-
-
-def extract_halls_store_count(halls_html: str):
-    """機種別ホール検索ページの「全N件」から店舗数を取得する。"""
-    text = norm(re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>", " ", halls_html, flags=re.I))
-    matches = re.findall(r"全\s*([0-9][0-9,]*)\s*件", text, re.I)
-    if matches:
-        return int(matches[0].replace(",", ""))
     return None
 
 
@@ -295,11 +258,7 @@ def is_pre_release(machine_html: str, store_count):
 
 
 def filter_machine_details(candidates, delay: float):
-    """詳細ページを取得し、ページ範囲ごとの設置店条件で絞る。
-
-    Ver8.19: 詳細ページの取得・解析に失敗した場合は最大3回リトライし、
-    11～30ページでは機種別ホール検索ページをフォールバックとして利用する。
-    """
+    """候補機種の詳細ページを取得し、ページ範囲ごとの設置店数条件で絞る。"""
     result = {"パチスロ": [], "パチンコ": []}
     total_candidates = sum(len(v) for v in candidates.values())
     checked = 0
@@ -309,14 +268,13 @@ def filter_machine_details(candidates, delay: float):
             page_no = item["page"]
             name = item["name"]
             url = item["url"]
-            print(f"  [詳細] {checked}/{total_candidates} {name} (一覧{page_no}ページ)")
-            txt = None
-            store_count = None
+            print(f"  [詳細] {checked}/{total_candidates} {name}")
             try:
-                txt, used_attempt = fetch_with_retry(url, attempts=3, label=name)
+                txt = fetch(url)
                 store_count = extract_store_count(txt)
-                print(f"    -> 詳細ページ取得: {used_attempt}回目 / 設置店={store_count if store_count is not None else '取得失敗'}")
-
+                # 1～10ページは導入前機種だけ除外し、それ以外はすべて採用。
+                # 11～20ページは設置店300店舗以上、21～30ページは500店舗以上。
+                # 31ページ以降は取得対象外（標準は30ページ）。
                 if is_pre_release(txt, store_count):
                     print("    -> 除外: 導入前/設置店0店舗")
                     continue
@@ -324,41 +282,25 @@ def filter_machine_details(candidates, delay: float):
                 if page_no <= 10:
                     result[kind].append(name)
                     if store_count is None:
-                        print("    -> 採用: 1～10ページ（導入前ではないため採用）")
+                        print("    -> 採用: 1～10ページ（導入前ではないため取得）")
                     else:
                         print(f"    -> 採用: 1～10ページ / 設置店 {store_count}店舗")
                     continue
 
-                # 11～30ページは設置店数が必須。詳細ページで取れなければ
-                # 機種別ホール検索ページへフォールバックする。
-                if store_count is None:
-                    halls_url = extract_halls_url(txt, url)
-                    if halls_url:
-                        try:
-                            halls_html, halls_attempt = fetch_with_retry(halls_url, attempts=3, label=f"{name} 店舗一覧")
-                            store_count = extract_halls_store_count(halls_html)
-                            print(f"    -> 店舗一覧フォールバック: {halls_attempt}回目 / 設置店={store_count if store_count is not None else '取得失敗'}")
-                        except Exception as e:
-                            print(f"    -> 店舗一覧フォールバック失敗: {e}")
-                    else:
-                        print("    -> 店舗一覧URLを特定できませんでした")
-
                 min_count = 300 if page_no <= 20 else 500
                 if store_count is None:
-                    print(f"    -> 除外: 設置店数を取得できませんでした（条件={min_count}店舗以上）")
+                    print("    -> 除外: 設置店数を取得できませんでした")
                     continue
                 if store_count < min_count:
                     print(f"    -> 除外: 設置店 {store_count}店舗 < {min_count}店舗")
                     continue
                 result[kind].append(name)
-                print(f"    -> 採用: 設置店 {store_count}店舗 >= {min_count}店舗")
+                print(f"    -> 採用: 設置店 {store_count}店舗")
             except Exception as e:
-                # 取得そのものに失敗した場合も、ここで候補を黙って消さず原因を表示する。
-                print(f"    -> 詳細取得失敗（3回試行済み）: {e}", file=sys.stderr)
+                print(f"    -> 詳細取得失敗: {e}", file=sys.stderr)
             if delay:
                 time.sleep(delay)
     return result
-
 
 def extract_machine_names_from_index(page_html):
     # フォールバック: ページ内のリンク文字列から機種らしいものを拾う。
@@ -460,7 +402,7 @@ def main():
     payload = {
         "version": version,
         "updatedAt": now.isoformat(timespec="seconds"),
-        "source": "P-WORLD最新順機種インデックス→各機種詳細ページの「設置店○店舗」を取得（失敗時3回リトライ＋機種別店舗一覧フォールバック）してページ別フィルター適用",
+        "source": "P-WORLD最新順機種インデックス→各機種詳細ページの「設置店○店舗」を取得してページ別フィルター適用",
         "filterRules": [
             {"pages": "1-10", "condition": "導入前機種を除外し、その他はすべて取得"},
             {"pages": "11-20", "minDetailStoreCount": 300},
@@ -469,7 +411,7 @@ def main():
         "sourceUrl": BASE,
         "fetchedPages": args.pages,
         "pworldTotalAtFetch": total,
-        "note": "機種インデックス横の「○件」は取得・判定に使用しない。詳細ページ取得は最大3回リトライし、11～30ページでは店舗一覧ページもフォールバックする。",
+        "note": "機種インデックス横の「○件」は取得・判定に使用しない",
         "パチスロ": data["パチスロ"],
         "パチンコ": data["パチンコ"]
     }

@@ -1,10 +1,10 @@
-@echo off
+﻿@echo off
 setlocal
 cd /d "%~dp0"
 chcp 65001 >nul
 
 echo ============================================
-echo   P-WORLD 機種データ更新 Ver8.19
+echo   P-WORLD 機種データ更新 Ver8.18
 echo ============================================
 echo.
 echo P-WORLDの最新機種情報を取得します。
