@@ -70,6 +70,7 @@
       <span class="smallText">※機種マスターはネット優先、通信できない場合は端末保存データを使用</span></p>
     <div class="settingsGrid">
       <button id="updateMachines" class="primary">↻ 機種データを更新</button>
+      <button id="updateStores">↻ 店舗データを更新</button>
       <button id="exportData">↓ 収支をバックアップ</button>
       <label class="fileButton">↑ バックアップから復元<input id="importData" type="file" accept="application/json,.json"></label>
     </div>
@@ -95,7 +96,7 @@
     <h2>分析</h2>
     <div class="filters">
       <label>期間<select id="period"><option value="month">月毎</option><option value="year">年毎</option><option value="all">全期間</option></select><input id="periodMonth" type="month"><select id="periodYear" class="hiddenField"></select></label>
-      <label>集計<select id="group"><option value="day" selected>日別</option><option value="machine">台別</option><option value="genre">ジャンル別</option></select></label><label id="analysisTargetWrap">対象<select id="analysisTarget" class="hiddenField"><option value="">対象を選択してください</option></select></label>
+      <label>集計<select id="group"><option value="day" selected>日別</option><option value="machine">台別</option><option value="genre">ジャンル別</option><option value="store">店舗別</option></select></label><label id="analysisTargetWrap">対象<select id="analysisTarget" class="hiddenField"><option value="">対象を選択してください</option></select></label>
     </div>
   </div>
   <div class="summary">
@@ -105,7 +106,7 @@
     <div><span>勝率</span><strong id="statWinRate">0%</strong></div>
   </div>
   <div id="detailStats" class="machineStats"></div>
-  <div class="card"><h3>収支推移</h3><p class="smallText">日別：日ごとの累計収支 ／ 台別・ジャンル別：選択した対象の累計収支</p><canvas id="statsChart" height="250"></canvas></div>
+  <div class="card"><h3>収支推移</h3><p class="smallText">日別：日ごとの累計収支 ／ 台別・ジャンル別・店舗別：選択した対象の累計収支</p><canvas id="statsChart" height="250"></canvas></div>
   <div class="card">
     <div class="cardhead detailHead"><h3>明細</h3><div class="detailTools"><select id="detailSort" aria-label="明細の並び替え"><option value="dateDesc">日付の新しい順</option><option value="dateAsc">日付の古い順</option><option value="netDesc">収支額の大きい順</option><option value="netAsc">収支額の小さい順</option><option value="investDesc">投資額の大きい順</option><option value="investAsc">投資額の小さい順</option><option value="returnDesc">回収額の大きい順</option><option value="returnAsc">回収額の小さい順</option></select><button type="button" id="addFromStats" class="primary small" onclick="openForm()">＋入力</button></div></div>
     <div id="statsList"></div>
