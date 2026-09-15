@@ -27,7 +27,7 @@ const STORE_DATA_KEY="gambling-store-data-v1";
 const STORE_CUSTOM_KEY="gambling-store-custom-v1";
 let STORE_DATA={stores:[]};
 
-const APP_VERSION="8.32";
+const APP_VERSION="8.35.3";
 
 function loadMachineData(){
   try{
@@ -191,11 +191,24 @@ function yenValue(type,amount,genre,rate){return type==='hold'?Number(amount||0)
 // 現金入力は「千円単位」で簡略入力（1=1,000円 / 11.5=11,500円）。内部保存は従来どおり円。
 function cashInputValue(yen){return Number(yen||0)/1000}
 function inputValueToYen(type,value){return type==='cash'?Number(value||0)*1000:Number(value||0)}
+function calcInputYen(type,value,genre,rate){return type==='hold'?Number(value||0)*Number(rate||1):Number(value||0)*1000}
 function inputStep(type){return type==='cash'?'0.1':'1'}
 function inputPlaceholder(type){return type==='cash'?'例：1 = 1,000円':'金額を入力'}
 function invYen(e){return yenValue(e.investType||'cash',e.invest||0,e.genre,e.rate)}
 function retYen(e){return yenValue(e.returnType||'cash',e.return||0,e.genre,e.rate)}
-const net=e=>retYen(e)-invYen(e);
+const rawNet=e=>retYen(e)-invYen(e);
+function personalNet(e){return rawNet(e)}
+function dayPersonalNet(es){
+  const nori=es.find(e=>e?.noriuchi && Number.isFinite(Number(e.settlement)));
+  if(!nori) return es.reduce((a,e)=>a+rawNet(e),0);
+  // ノリ打ち時の自分の投資額は「投資」に入力した現金分だけ。持ち玉投資は除外。
+  const personalInvest=es.reduce((a,e)=>{
+    return a+(e.investType==='cash'?Number(e.invest||0):0);
+  },0);
+  // 精算額は最終的に受け取った（または支払った）金額。収支 = 精算額 - 自分の現金投資額。
+  return Number(nori.settlement)-personalInvest;
+}
+const net=personalNet;
 function displayMoneyOrUnit(type,amount,genre,rate){return type==='hold'?`${Number(amount||0).toLocaleString()}${unitFor(genre)}`:yen(Number(amount||0))}
 function save(){localStorage.setItem(KEY,JSON.stringify(entries));renderAll()}
 function newId(){return (typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function')?crypto.randomUUID():`e-${Date.now()}-${Math.random().toString(36).slice(2)}`} 
@@ -210,7 +223,7 @@ function renderCalendar(){
  let html="";for(let i=0;i<first;i++)html+='<div class="empty"></div>';
  let total=0,inv=0,wins=0,loss=0;
  for(let d=1;d<=last;d++){
-  let k=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,arr=map[k]||[],n=arr.reduce((a,e)=>a+net(e),0);
+  let k=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,arr=map[k]||[],n=dayPersonalNet(arr);
   total+=n;inv+=arr.reduce((a,e)=>a+invYen(e),0);if(n>0)wins++;if(n<0)loss++;
   let cls=n>0?"win":n<0?"lose":"zero",today=k===dateKey(new Date())?" today":"";
   html+=`<button class="day ${cls}${today}" data-date="${k}"><span class="date">${d}</span><span class="daynet ${n>0?"pos":n<0?"neg":"neutral"}">${arr.length?yen(n):"—"}</span></button>`;
@@ -219,15 +232,15 @@ function renderCalendar(){
  $$("#calendar .day").forEach(b=>b.onclick=()=>{reportDate=parseDate(b.dataset.date);switchPage("report");renderReport()});
  drawChart($("#calendarChart"),dailySeries(y,m));
 }
-function dailySeries(y,m){let last=new Date(y,m+1,0).getDate(),map={};entries.forEach(e=>{if(e.date.startsWith(`${y}-${String(m+1).padStart(2,"0")}`))map[e.date]=(map[e.date]||0)+net(e)});let cum=0,a=[];for(let d=1;d<=last;d++){let k=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;cum+=map[k]||0;a.push({label:d,value:cum})}return a}
+function dailySeries(y,m){let last=new Date(y,m+1,0).getDate(),map={};entries.forEach(e=>{if(e.date.startsWith(`${y}-${String(m+1).padStart(2,"0")}`))(map[e.date]??=[]).push(e)});let cum=0,a=[];for(let d=1;d<=last;d++){let k=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,n=dayPersonalNet(map[k]||[]);cum+=n;a.push({label:d,value:cum})}return a}
 function renderReport(){
- const key=dateKey(reportDate),es=entries.filter(e=>e.date===key),n=es.reduce((a,e)=>a+net(e),0),inv=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0);
- $("#reportDate").textContent=formatDateJP(key);$("#reportNet").textContent=yen(n);$("#reportNet").className=n>0?"pos":n<0?"neg":"neutral";$("#reportInvest").textContent=yen(inv);$("#reportReturn").textContent=yen(ret);$("#reportWins").textContent=es.filter(e=>net(e)>0).length;$("#reportLosses").textContent=es.filter(e=>net(e)<0).length;$("#reportCount").textContent=es.length+"件";
+ const key=dateKey(reportDate),es=entries.filter(e=>e.date===key),n=dayPersonalNet(es),inv=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0);
+ $("#reportDate").textContent=formatDateJP(key);$("#reportNet").textContent=yen(n);$("#reportNet").className=n>0?"pos":n<0?"neg":"neutral";$("#reportInvest").textContent=yen(inv);$("#reportReturn").textContent=yen(ret);$("#reportWins").textContent=es.filter(e=>rawNet(e)>0).length;$("#reportLosses").textContent=es.filter(e=>rawNet(e)<0).length;$("#reportCount").textContent=es.length+"件";
  const groups={};es.forEach(e=>(groups[e.machine]??=[]).push(e));
- const machineArr=Object.entries(groups).sort((a,b)=>b[1].reduce((x,e)=>x+net(e),0)-a[1].reduce((x,e)=>x+net(e),0));
- $("#reportMachines").innerHTML=machineArr.length?machineArr.map(([machine,list])=>{let total=list.reduce((a,e)=>a+net(e),0);return `<button class="reportMachine" data-machine="${escapeHtml(machine)}"><div><b>${escapeHtml(machine)}</b><small>${escapeHtml(list[0].genre)} ・ ${list[0].rate?list[0].rate+"円":""} ・ ${list.length}件</small></div><strong class="${total>=0?"pos":"neg"}">${yen(total)}</strong></button>`}).join(""):"<div class='emptyState'>この日の記録はありません。<br>右上の「＋ 記録」から追加できます。</div>";
+ const machineArr=Object.entries(groups).sort((a,b)=>b[1].reduce((x,e)=>x+rawNet(e),0)-a[1].reduce((x,e)=>x+rawNet(e),0));
+ $("#reportMachines").innerHTML=machineArr.length?machineArr.map(([machine,list])=>{let total=list.reduce((a,e)=>a+rawNet(e),0);return `<button class="reportMachine" data-machine="${escapeHtml(machine)}"><div><b>${escapeHtml(machine)}</b><small>${escapeHtml(list[0].genre)} ・ ${list[0].rate?list[0].rate+"円":""} ・ ${list.length}件</small></div><strong class="${total>=0?"pos":"neg"}">${yen(total)}</strong></button>`}).join(""):"<div class='emptyState'>この日の記録はありません。<br>右上の「＋ 記録」から追加できます。</div>";
  $$(".reportMachine").forEach(b=>b.onclick=()=>{const m=b.dataset.machine;const first=es.find(e=>e.machine===m);if(first)openForm(key,first.id)});
- $("#reportEntries").innerHTML=es.length?es.map(e=>`<div class="entryCard"><div class="entryTop"><div><b>${escapeHtml(e.machine)}</b><small>${escapeHtml(e.genre)} ・ ${e.rate?e.rate+"円":""} / 投資 ${displayMoneyOrUnit(e.investType,e.invest,e.genre,e.rate)} / 回収 ${displayMoneyOrUnit(e.returnType,e.return,e.genre,e.rate)}</small></div><strong class="${net(e)>=0?"pos":"neg"}">${yen(net(e))}</strong></div>${e.memo?`<p class="memo">${escapeHtml(e.memo)}</p>`:""}<div class="entryActions"><button onclick="editEntry('${e.id}')">編集</button><button class="danger" onclick="deleteById('${e.id}')">削除</button></div></div>`).join(""):"<div class='emptyState'>記録なし</div>";
+ $("#reportEntries").innerHTML=es.length?es.map(e=>`<div class="entryCard"><div class="entryTop"><div><b>${escapeHtml(e.machine)}</b><small>${escapeHtml(e.genre)} ・ ${e.rate?e.rate+"円":""} / 投資 ${displayMoneyOrUnit(e.investType,e.invest,e.genre,e.rate)} / 回収 ${displayMoneyOrUnit(e.returnType,e.return,e.genre,e.rate)}</small></div><strong class="${rawNet(e)>=0?"pos":"neg"}">${yen(rawNet(e))}</strong></div>${e.memo?`<p class="memo">${escapeHtml(e.memo)}</p>`:""}<div class="entryActions"><button onclick="editEntry('${e.id}')">編集</button><button class="danger" onclick="deleteById('${e.id}')">削除</button></div></div>`).join(""):"<div class='emptyState'>記録なし</div>";
 }
 function periodRange(type){
  const now=new Date();
@@ -261,7 +274,7 @@ function updatePeriodControls(){
 }
 
 function inPeriod(e,r){return e.date>=r[0]&&e.date<=r[1]}
-function renderStats(){let r=periodRange($("#period").value),es=entries.filter(e=>inPeriod(e,r)),total=es.reduce((a,e)=>a+net(e),0),inv=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0),win=es.filter(e=>net(e)>0).length;$("#statNet").textContent=yen(total);$("#statNet").className=total>0?"pos":total<0?"neg":"neutral";$("#statInvest").textContent=yen(inv);$("#statReturn").textContent=yen(ret);$("#statWinRate").textContent=(es.length?(win/es.length*100):0).toFixed(1)+"%";
+function renderStats(){let r=periodRange($("#period").value),es=entries.filter(e=>inPeriod(e,r)),byDate={};es.forEach(e=>(byDate[e.date]??=[]).push(e));let total=Object.values(byDate).reduce((a,arr)=>a+dayPersonalNet(arr),0),inv=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0),win=es.filter(e=>net(e)>0).length;$("#statNet").textContent=yen(total);$("#statNet").className=total>0?"pos":total<0?"neg":"neutral";$("#statInvest").textContent=yen(inv);$("#statReturn").textContent=yen(ret);$("#statWinRate").textContent=(es.length?(win/es.length*100):0).toFixed(1)+"%";
  const group=$("#group").value; const target=$("#analysisTarget")?.value||"";
  updateAnalysisTargetOptions(es,group);
  const selectedTarget=$("#analysisTarget")?.value||target;
@@ -269,10 +282,10 @@ function renderStats(){let r=periodRange($("#period").value),es=entries.filter(e
    const targetEntries=selectedTarget?es.filter(e=>e.store===selectedTarget):[];
    renderStoreGroups(targetEntries,selectedTarget);
    $("#statsList").innerHTML=selectedTarget?`<p class='smallText neutral'>${escapeHtml(selectedTarget)} の集計結果です。</p>`:"<p class='smallText neutral'>対象の店舗を選択してください。</p>";
-   drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar"));return;
+   drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar",rawNet));return;
  }
- let targetEntries=es;if(group==="machine"||group==="genre")targetEntries=selectedTarget?es.filter(e=>(group==="machine"?e.machine:e.genre)===selectedTarget):[];$("#detailStats").innerHTML=group==="machine"&&selectedTarget?machineCard(selectedTarget,targetEntries):group==="genre"&&selectedTarget?machineCard(selectedTarget,targetEntries):"";renderStatsList(targetEntries);drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar"));}
-function groupedStats(list,keyFn){const m=new Map();for(const e of list){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}return [...m.entries()].map(([key,arr])=>({key,arr,net:arr.reduce((a,e)=>a+net(e),0),invest:arr.reduce((a,e)=>a+invYen(e),0),ret:arr.reduce((a,e)=>a+retYen(e),0),count:arr.length})).sort((a,b)=>b.net-a.net)}
+ let targetEntries=es;if(group==="machine"||group==="genre")targetEntries=selectedTarget?es.filter(e=>(group==="machine"?e.machine:e.genre)===selectedTarget):[];$("#detailStats").innerHTML=group==="machine"&&selectedTarget?machineCard(selectedTarget,targetEntries):group==="genre"&&selectedTarget?machineCard(selectedTarget,targetEntries):"";renderStatsList(targetEntries);drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar",rawNet));}
+function groupedStats(list,keyFn){const m=new Map();for(const e of list){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}return [...m.entries()].map(([key,arr])=>({key,arr,net:arr.reduce((a,e)=>a+rawNet(e),0),invest:arr.reduce((a,e)=>a+invYen(e),0),ret:arr.reduce((a,e)=>a+retYen(e),0),count:arr.length})).sort((a,b)=>b.net-a.net)}
 function renderStoreGroups(es,target="") {
  const gs=groupedStats(es,e=>e.store?storeKey(e):"未選択");
  if(!gs.length){$("#detailStats").innerHTML=`<div class="card emptyState">${target?"この店舗のデータがありません":"店舗を選択してください"}</div>`;return;}
@@ -283,22 +296,22 @@ function renderStatsList(es){
  const sort=$("#detailSort")?.value||"dateDesc";
  const list=es.slice().sort((a,b)=>{
    if(sort==="dateAsc")return a.date.localeCompare(b.date);
-   if(sort==="netDesc")return net(b)-net(a)||b.date.localeCompare(a.date);
-   if(sort==="netAsc")return net(a)-net(b)||b.date.localeCompare(a.date);
+   if(sort==="netDesc")return rawNet(b)-rawNet(a)||b.date.localeCompare(a.date);
+   if(sort==="netAsc")return rawNet(a)-rawNet(b)||b.date.localeCompare(a.date);
    if(sort==="investDesc")return invYen(b)-invYen(a)||b.date.localeCompare(a.date);
    if(sort==="investAsc")return invYen(a)-invYen(b)||b.date.localeCompare(a.date);
    if(sort==="returnDesc")return retYen(b)-retYen(a)||b.date.localeCompare(a.date);
    if(sort==="returnAsc")return retYen(a)-retYen(b)||b.date.localeCompare(a.date);
    return b.date.localeCompare(a.date);
  });
- $("#statsList").innerHTML=list.length?list.map(e=>`<div class="entryCard"><div class="entryTop"><div><b>${escapeHtml(e.machine)}</b><small>${formatDateJP(e.date)} ・ ${escapeHtml(e.genre)} ・ ${e.rate?e.rate+"円":""}</small></div><strong class="${net(e)>=0?"pos":"neg"}">${yen(net(e))}</strong></div><div class="smallText">投資 ${displayMoneyOrUnit(e.investType,e.invest,e.genre,e.rate)} / 回収 ${displayMoneyOrUnit(e.returnType,e.return,e.genre,e.rate)}</div>${e.memo?`<p class="memo">${escapeHtml(e.memo)}</p>`:""}<div class="entryActions"><button onclick="editEntry('${e.id}')">編集</button><button class="danger" onclick="deleteById('${e.id}')">削除</button></div></div>`).join(""):"<p class='neutral'>データがありません</p>";
+ $("#statsList").innerHTML=list.length?list.map(e=>`<div class="entryCard"><div class="entryTop"><div><b>${escapeHtml(e.machine)}</b><small>${formatDateJP(e.date)} ・ ${escapeHtml(e.genre)} ・ ${e.rate?e.rate+"円":""}</small></div><strong class="${rawNet(e)>=0?"pos":"neg"}">${yen(rawNet(e))}</strong></div><div class="smallText">投資 ${displayMoneyOrUnit(e.investType,e.invest,e.genre,e.rate)} / 回収 ${displayMoneyOrUnit(e.returnType,e.return,e.genre,e.rate)}</div>${e.memo?`<p class="memo">${escapeHtml(e.memo)}</p>`:""}<div class="entryActions"><button onclick="editEntry('${e.id}')">編集</button><button class="danger" onclick="deleteById('${e.id}')">削除</button></div></div>`).join(""):"<p class='neutral'>データがありません</p>";
 }
 function updateAnalysisTargetOptions(es,group){const sel=$("#analysisTarget");if(!sel)return;const needs=group==="machine"||group==="genre"||group==="store";sel.classList.toggle("hiddenField",!needs);if(!needs){sel.innerHTML='<option value="">対象を選択</option>';return;}let vals;if(group==="store")vals=[...new Set(es.map(e=>e.store).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));else{const key=group==="machine"?"machine":"genre";vals=[...new Set(es.map(e=>e[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));}const prev=sel.value;sel.innerHTML='<option value="">対象を選択してください</option>'+vals.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");if(vals.includes(prev))sel.value=prev;else if(vals.length===1)sel.value=vals[0];}
-function machineCard(key,es){let n=es.map(net),wins=n.filter(x=>x>0).length,invest=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0),sum=n.reduce((a,x)=>a+x,0);let avg=es.length?sum/es.length:0,max=Math.max(...n,0),min=Math.min(...n,0);return `<div class="machineCard"><h3>${escapeHtml(key)}</h3><div class="statsGrid"><div><span>最高勝ち額</span><b class="pos">${yen(max)}</b></div><div><span>総投資</span><b>${yen(invest)}</b></div><div><span>平均収支</span><b class="${avg>=0?"pos":"neg"}">${yen(avg)}</b></div><div><span>最高負け額</span><b class="neg">${yen(min)}</b></div><div><span>総回収</span><b>${yen(ret)}</b></div><div><span>勝率</span><b>${es.length?(wins/es.length*100).toFixed(1):0}%</b></div></div></div>`}
-function periodSeries(es,r,type,mode="calendar"){
+function machineCard(key,es){let n=es.map(rawNet),wins=n.filter(x=>x>0).length,invest=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0),sum=n.reduce((a,x)=>a+x,0);let avg=es.length?sum/es.length:0,max=Math.max(...n,0),min=Math.min(...n,0);return `<div class="machineCard"><h3>${escapeHtml(key)}</h3><div class="statsGrid"><div><span>最高勝ち額</span><b class="pos">${yen(max)}</b></div><div><span>総投資</span><b>${yen(invest)}</b></div><div><span>平均収支</span><b class="${avg>=0?"pos":"neg"}">${yen(avg)}</b></div><div><span>最高負け額</span><b class="neg">${yen(min)}</b></div><div><span>総回収</span><b>${yen(ret)}</b></div><div><span>勝率</span><b>${es.length?(wins/es.length*100).toFixed(1):0}%</b></div></div></div>`}
+function periodSeries(es,r,type,mode="calendar",valueFn=net){
  // 表示単位（横軸ラベル）とデータ粒度を分離。通常表示は期間内の全日、連続表示は記録日のみを描画する。
  if(!r||!r[0]||!r[1]||!es.length)return [];
- const map={};es.forEach(e=>map[e.date]=(map[e.date]||0)+net(e));
+ const map={};es.forEach(e=>map[e.date]=(map[e.date]||0)+valueFn(e));
  const start=parseDate(r[0]),end=parseDate(r[1]);
  let dates=[];
  if(mode==="continuous"){
@@ -410,7 +423,16 @@ function addEntryRow(data={}){
  div.querySelector('.customRowBtn').onclick=()=>{custom.classList.toggle('hiddenField');if(!custom.classList.contains('hiddenField')){select.value='';div.dataset.machine='';custom.focus()}else{custom.value='';updateRowPreview(div)}};custom.oninput=()=>{div.dataset.machine=custom.value.trim();updateRowPreview(div)};
  div.querySelector('.carryBtn').onclick=()=>{const prev=div.previousElementSibling;if(!prev)return alert('前の機種がありません');const pType=prev.querySelector('.rowReturnType').value,pVal=Number(prev.querySelector('.rowReturn').value||0),pGenre=prev.querySelector('.rowGenre').value,pRate=Number(prev.querySelector('.rowRate').value||1);if(pType!=='hold')return alert('前の機種の回収が持ち玉になっていません');if(pGenre!==genre.value){genre.value=pGenre;refreshRate();populate()}rate.value=pRate;investType.value='hold';const input=div.querySelector('.rowInvest');input.value=pVal;input.dataset.lastType='hold';input.step='1';updateRowPreview(div);updateBatchTotal()};
  div.querySelector('.removeRow').onclick=()=>{if(wrap.children.length<=1){alert('少なくとも1台は入力してください');return}div.remove();renumberRows();updateBatchTotal()};
- [investType,returnType].forEach(sel=>sel.oninput=sel.onchange=()=>{const input=sel===investType?div.querySelector('.rowInvest'):div.querySelector('.rowReturn');input.step=inputStep(sel.value);input.placeholder=inputPlaceholder(sel.value);const current=Number(input.value||0);if(sel.value==='cash' && input.dataset.lastType==='hold'){input.value=cashInputValue(current*Number(div.querySelector('.rowRate').value||1));}else if(sel.value==='hold' && input.dataset.lastType==='cash'){input.value=current*1000;}input.dataset.lastType=sel.value;updateRowPreview(div);updateBatchTotal()});
+ [investType,returnType].forEach(sel=>sel.onchange=()=>{
+   const input=sel===investType?div.querySelector('.rowInvest'):div.querySelector('.rowReturn');
+   const oldType=input.dataset.lastType||sel.value, newType=sel.value, rateNow=Number(rate.value||1), raw=input.value.trim();
+   if(raw!=='' && oldType!==newType){
+     const yen=calcInputYen(oldType,raw,genre.value,rateNow);
+     input.value=newType==='cash'?cashInputValue(yen):String(yen/rateNow);
+   }
+   input.step=inputStep(newType);input.placeholder=inputPlaceholder(newType);input.dataset.lastType=newType;
+   updateRowPreview(div);updateBatchTotal();
+ });
  div.querySelectorAll('.rowInvest,.rowReturn').forEach(x=>x.oninput=x.onchange=()=>{updateRowPreview(div);updateBatchTotal()});
  refreshRate();investType.querySelector('option[value="cash"]').textContent='現金（千円）';returnType.querySelector('option[value="cash"]').textContent='現金（千円）';div.querySelector('.rowInvest').dataset.lastType=investType.value;div.querySelector('.rowReturn').dataset.lastType=returnType.value;
  // 編集時は既存の機種名を検索欄へ先に設定してから候補を生成する。
@@ -430,23 +452,60 @@ function addEntryRow(data={}){
  populate();
  updateRowPreview(div);updateBatchTotal();
 }
-function renderRowRecent(div){const wrap=div.querySelector('.recentMachines'),rs=recentMachines();wrap.innerHTML=rs.length?rs.map(x=>`<button type="button" class="recentMachine" data-machine="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join(""):'<span class="neutral">まだありません</span>';wrap.querySelectorAll('.recentMachine').forEach(b=>b.onclick=()=>{div.dataset.machine=b.dataset.machine;const s=div.querySelector('.rowMachine'),c=div.querySelector('.rowCustom'),q=div.querySelector('.rowSearch');s.value=b.dataset.machine;q.value=b.dataset.machine;c.value='';c.classList.add('hiddenField');div.querySelector('.machineSuggestions').innerHTML='';updateRowPreview(div)})}
-function updateRowPreview(div){const genre=div.querySelector('.rowGenre').value,rate=Number(div.querySelector('.rowRate').value||1),it=div.querySelector('.rowInvestType').value,rt=div.querySelector('.rowReturnType').value,inv=inputValueToYen(it,div.querySelector('.rowInvest').value),ret=inputValueToYen(rt,div.querySelector('.rowReturn').value),n=ret-inv;const el=div.querySelector('.rowNet');el.textContent=yen(n);el.className='rowNet '+(n>0?'pos':n<0?'neg':'neutral');div.querySelector('.rowUnitPreview').textContent=`投資 ${displayMoneyOrUnit(it,inv,genre,rate)} ／ 回収 ${displayMoneyOrUnit(rt,ret,genre,rate)}`}
-function updateBatchTotal(){let inv=0,ret=0;$$('#entryRows .entryRow').forEach(d=>{const it=d.querySelector('.rowInvestType').value,rt=d.querySelector('.rowReturnType').value;inv+=inputValueToYen(it,d.querySelector('.rowInvest').value);ret+=inputValueToYen(rt,d.querySelector('.rowReturn').value)});const n=ret-inv;$("#batchInvest").textContent=yen(inv);$("#batchReturn").textContent=yen(ret);$("#batchNet").textContent=yen(n);$("#batchNet").className=n>0?'pos':n<0?'neg':'neutral'}
+function renderRowRecent(div){
+ const wrap=div.querySelector('.recentMachines'),rs=recentMachines();
+ wrap.innerHTML=rs.length?rs.map(x=>`<button type="button" class="recentMachine" data-machine="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join(""):'<span class="neutral">まだありません</span>';
+ wrap.querySelectorAll('.recentMachine').forEach(b=>b.onclick=()=>{
+   const value=b.dataset.machine;
+   const found=entries.slice().reverse().find(e=>e.machine===value);
+   const genre=div.querySelector('.rowGenre'),rate=div.querySelector('.rowRate');
+   if(found?.genre && genre.value!==found.genre){genre.value=found.genre;genre.dispatchEvent(new Event('change',{bubbles:true}));}
+   if(found?.rate){rate.value=String(found.rate);rate.dispatchEvent(new Event('change',{bubbles:true}));}
+   const q=div.querySelector('.rowSearch'),c=div.querySelector('.rowCustom');
+   q.value=value;c.value='';c.classList.add('hiddenField');
+   q.dispatchEvent(new Event('input',{bubbles:true}));
+ });
+}
+function updateRowPreview(div){const genre=div.querySelector('.rowGenre').value,rate=Number(div.querySelector('.rowRate').value||1),it=div.querySelector('.rowInvestType').value,rt=div.querySelector('.rowReturnType').value,inv=calcInputYen(it,div.querySelector('.rowInvest').value,genre,rate),ret=calcInputYen(rt,div.querySelector('.rowReturn').value,genre,rate),n=ret-inv;const el=div.querySelector('.rowNet');el.textContent=yen(n);el.className='rowNet '+(n>0?'pos':n<0?'neg':'neutral');div.querySelector('.rowUnitPreview').textContent=`投資 ${displayMoneyOrUnit(it,inv,genre,rate)} ／ 回収 ${displayMoneyOrUnit(rt,ret,genre,rate)}`}
+function updateBatchTotal(){
+ let inv=0,ret=0,raw=0,personalInv=0;
+ $$(`#entryRows .entryRow`).forEach(d=>{
+   const genre=d.querySelector('.rowGenre').value,rate=Number(d.querySelector('.rowRate').value||1);
+   const it=d.querySelector('.rowInvestType').value,rt=d.querySelector('.rowReturnType').value;
+   const i=calcInputYen(it,d.querySelector('.rowInvest').value,genre,rate);
+   const r=calcInputYen(rt,d.querySelector('.rowReturn').value,genre,rate);
+   inv+=i;ret+=r;raw+=r-i;
+   // ノリ打ちの自分の投資額は「投資=現金」の入力だけを合計。持ち玉投資は0円扱い。
+   if(it==='cash') personalInv+=i;
+ });
+ const nori=!!$("#batchNori")?.checked;
+ const settlementRaw=$("#batchSettlement")?.value.trim()||'';
+ const settlement=settlementRaw===''?0:Number(settlementRaw);
+ const n=nori?settlement-personalInv:raw;
+ $("#batchInvest").textContent=yen(nori?personalInv:inv);
+ $("#batchInvestLabel").textContent=nori?'自分の投資額（現金のみ）':'合計投資';
+ $("#batchReturn").textContent=yen(ret);
+ $("#batchNet").textContent=yen(n);
+ $("#batchNet").className=n>0?'pos':n<0?'neg':'neutral';
+}
 function renumberRows(){$$('#entryRows .entryRow').forEach((d,i)=>d.querySelector('.rowHead h3').textContent=`機種 ${i+1}`)}
-function collectRow(div){const custom=div.querySelector('.rowCustom'),select=div.querySelector('.rowMachine');const machine=custom.classList.contains('hiddenField')?select.value:custom.value.trim();const it=div.querySelector('.rowInvestType').value,rt=div.querySelector('.rowReturnType').value;const st=collectStore(div);return {date:$("#entryDate").value,genre:div.querySelector('.rowGenre').value,rate:Number(div.querySelector('.rowRate').value||1),machine,investType:it,returnType:rt,invest:inputValueToYen(it,div.querySelector('.rowInvest').value),return:inputValueToYen(rt,div.querySelector('.rowReturn').value),memo:div.querySelector('.rowMemo').value.trim(),prefecture:st?.prefecture||"",city:st?.city||"",store:st?.store||"",storeUrl:st?.url||""}}
+function collectRow(div){const custom=div.querySelector('.rowCustom'),select=div.querySelector('.rowMachine');const machine=custom.classList.contains('hiddenField')?(select.value||div.dataset.machine||''):custom.value.trim();const it=div.querySelector('.rowInvestType').value,rt=div.querySelector('.rowReturnType').value;const st=collectStore(div);return {date:$("#entryDate").value,genre:div.querySelector('.rowGenre').value,rate:Number(div.querySelector('.rowRate').value||1),machine,investType:it,returnType:rt,invest:inputValueToYen(it,div.querySelector('.rowInvest').value),return:inputValueToYen(rt,div.querySelector('.rowReturn').value),memo:div.querySelector('.rowMemo').value.trim(),prefecture:st?.prefecture||"",city:st?.city||"",store:st?.store||"",storeUrl:st?.url||""}}
 function openForm(date=dateKey(new Date()),id=null){
  const dialog=$("#entryDialog");
  if(!dialog){alert("入力画面の読み込みに失敗しました。ページを再読み込みしてください。");return;}
  editingId=id;
  const form=$("#entryForm");
  if(form)form.reset();
+ $("#batchNori").checked=false;
+ $("#batchSettlement").value='';
+ $("#batchSettlement").disabled=true;
+ $("#batchSettlementWrap").classList.add('hiddenField');
  $("#entryId").value=id||'';
  $("#entryDate").value=date||dateKey(new Date());
  $("#dialogTitle").textContent=id?'収支を編集':'収支をまとめて入力';
  $("#deleteEntry").style.display=id?'block':'none';
  $("#entryRows").innerHTML='';
- if(id){const e=entries.find(x=>x.id===id);if(e){$("#entryDate").value=e.date;addEntryRow(e)}}else addEntryRow({date:$("#entryDate").value});
+ if(id){const e=entries.find(x=>x.id===id);if(e){$("#entryDate").value=e.date;addEntryRow(e);if(e.noriuchi){$("#batchNori").checked=true;$("#batchSettlement").value=e.settlement!=null?Number(e.settlement):'';$("#batchSettlement").disabled=false;$("#batchSettlementWrap").classList.remove('hiddenField')}}}else addEntryRow({date:$("#entryDate").value});
  $("#addEntryRow").style.display=id?'none':'block';
  updateBatchTotal();
  try{ if(typeof dialog.showModal==='function') dialog.showModal(); else dialog.setAttribute('open',''); }catch(err){ dialog.setAttribute('open',''); }
@@ -455,6 +514,8 @@ function editEntry(id){openForm('',id)}
 function deleteById(id){if(confirm('この記録を削除しますか？')){entries=entries.filter(e=>e.id!==id);save();renderReport()}}
 function switchPage(name){$$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.page===name));$$('.page').forEach(x=>x.classList.toggle('active',x.id===name+'Page'));window.scrollTo({top:0,behavior:'smooth'})}
 
+$("#batchNori").onchange=()=>{const on=$("#batchNori").checked;$("#batchSettlementWrap").classList.toggle('hiddenField',!on);$("#batchSettlement").disabled=!on;if(!on)$("#batchSettlement").value='';updateBatchTotal()};
+$("#batchSettlement").oninput=()=>updateBatchTotal();
 $("#entryForm").onsubmit=e=>{
  e.preventDefault();
  const rows=$$('#entryRows .entryRow');
@@ -463,12 +524,16 @@ $("#entryForm").onsubmit=e=>{
  if(objs.some(x=>!x.date)){alert('日付を入力してください');return}
  if(objs.some(x=>!x.machine)){alert('機種・対象を選択または入力してください');return}
  if(objs.some(x=>!Number.isFinite(x.invest)||!Number.isFinite(x.return)||x.invest<0||x.return<0)){alert('投資・回収は0以上の数値を入力してください');return}
+ const nori=!!$("#batchNori")?.checked;
+ const settlementRaw=$("#batchSettlement")?.value.trim()||'';
+ if(nori && (settlementRaw==='' || !Number.isFinite(Number(settlementRaw)))){alert('ノリ打ちの場合は「自分の最終精算額」を入力してください');$("#batchSettlement").focus();return}
  if(editingId){
    const obj={...objs[0],id:editingId};
+   if(nori){obj.noriuchi=true;obj.settlement=Number(settlementRaw)}else{delete obj.noriuchi;delete obj.settlement}
    entries=entries.map(x=>x.id===editingId?obj:x);
    rememberCustomMachine(obj.genre,obj.machine); rememberStore(obj);
  }else{
-   objs.forEach(x=>{entries.push({...x,id:newId()}); rememberCustomMachine(x.genre,x.machine); rememberStore(x)});
+   objs.forEach((x,idx)=>{const obj={...x,id:newId()};if(nori&&idx===0){obj.noriuchi=true;obj.settlement=Number(settlementRaw)}entries.push(obj); rememberCustomMachine(x.genre,x.machine); rememberStore(x)});
  }
  localStorage.setItem(KEY,JSON.stringify(entries));
  const d=objs[0].date;
@@ -495,7 +560,7 @@ setupPeriodSelectors();
 $("#reportAdd").onclick=()=>openForm(dateKey(reportDate));
 $("#reportAdd2").onclick=()=>openForm(dateKey(reportDate));
 $("#addFromStats").onclick=()=>openForm();
-$("#addEntryRow").onclick=()=>addEntryRow();
+$("#addEntryRow").onclick=()=>{const prev=$("#entryRows .entryRow:last-child");let storeData={};if(prev){const st=collectStore(prev);if(st?.prefecture||st?.city||st?.store)storeData={prefecture:st.prefecture||"",city:st.city||"",store:st.store||"",storeUrl:st.url||""};}addEntryRow(storeData)};
 updateMachineUpdatedUI();
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js");
 try{renderAll();}catch(err){console.error("初期描画エラー:",err);}

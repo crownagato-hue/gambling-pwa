@@ -129,8 +129,14 @@
   <label>日付<input id="entryDate" type="date" required></label>
   <div id="entryRows"></div>
   <button type="button" id="addEntryRow" class="ghost full addRowBtn">＋ 機種を追加</button>
+  <div class="batchNori card">
+    <div class="batchNoriTitle">ノリ打ち・最終精算</div>
+    <label class="batchNoriCheck"><input type="checkbox" id="batchNori"> <strong>ノリ打ち</strong></label>
+    <div class="batchNoriHelp">複数の機種を入力したあと、最後に自分が実際に受け取った（または支払った）最終的な精算額を入力してください。</div>
+    <label id="batchSettlementWrap" class="hiddenField">自分の最終精算額（円・受取額／支払額）<input id="batchSettlement" type="number" step="1" placeholder="例：15,000（支払いは -5,000）" disabled></label>
+  </div>
   <div class="batchTotal card">
-    <div><span>合計投資</span><strong id="batchInvest">¥0</strong></div>
+    <div><span id="batchInvestLabel">合計投資</span><strong id="batchInvest">¥0</strong></div>
     <div><span>合計回収</span><strong id="batchReturn">¥0</strong></div>
     <div><span>合計収支</span><strong id="batchNet">¥0</strong></div>
   </div>
