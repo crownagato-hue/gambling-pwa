@@ -22,21 +22,32 @@ if not defined PY (
 
 echo Python: %PY%
 echo Starting local server on port %PORT%...
+echo Browser will open automatically.
 echo Keep this window open while using the app.
 echo.
 
-start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$url='http://127.0.0.1:%PORT%/'; for($i=0;$i -lt 40;$i++){try{Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1 ^| Out-Null; Start-Process $url; exit}catch{}; Start-Sleep -Milliseconds 250}"
+rem Start the HTTP server in a separate window so this launcher can open the browser.
+start "Gambling PWA Server" cmd /c "%PY% -m http.server %PORT% --bind 127.0.0.1"
 
-%PY% -m http.server %PORT% --bind 127.0.0.1
-set "ERR=%ERRORLEVEL%"
+rem Give the server a moment to start.
+timeout /t 1 /nobreak >nul
 
-echo.
-if not "%ERR%"=="0" (
-    echo [ERROR] Server stopped with code %ERR%.
-    echo Port %PORT% may already be in use.
+rem Open the app using the default browser.
+start "" "http://127.0.0.1:%PORT%/"
+
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Could not open the browser automatically.
+    echo Open this address manually:
+    echo http://127.0.0.1:%PORT%/
     pause
-) else (
-    echo Server stopped.
-    pause
+    exit /b 1
 )
+
+echo Browser launch command sent.
+echo.
+echo If the app does not appear, open:
+echo http://127.0.0.1:%PORT%/
+echo.
+pause
 endlocal

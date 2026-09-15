@@ -198,3 +198,9 @@ body.lightTheme .syncing{color:#9b7100}body.lightTheme .ok{color:#15966d}body.li
   /* グラフの縦軸ラベル用の余白はJS側で調整 */
 }
 .storePicker{margin:11px 0}.storePicker>label{position:relative;display:block}.storeSearch{margin-top:6px}.clearStoreSearch{position:absolute;right:5px;bottom:5px;width:34px;height:34px;padding:0}.storeSuggestions{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:260px;overflow:auto}.storeSuggestion{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;background:#101827;border:1px solid #303c55;border-radius:9px;padding:10px 12px;gap:10px}.storeSuggestion span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.storeSuggestion small{flex:none;color:#8793aa;font-size:10px}.storeSelectGrid{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;margin-top:8px}.storeSelectGrid select:disabled{opacity:.55}.storeStatTop{display:flex;justify-content:space-between;align-items:center;gap:10px}.storeStatTop h3{margin:0 0 3px}.storeStatTop>strong{font-size:20px;white-space:nowrap}@media(max-width:600px){.storeSelectGrid{grid-template-columns:1fr}.storeStatTop>strong{font-size:17px}}
+
+/* Ver8.31: 収支推移グラフの表示切替 */
+.chartTools{display:flex;justify-content:flex-end;margin:-34px 0 8px}
+.chartTools label{font-size:12px;color:#8793aa;display:flex;align-items:center;gap:6px}
+.chartTools select{font:inherit;color:inherit;background:transparent;border:1px solid #445066;border-radius:8px;padding:5px 8px}
+@media (max-width:600px){.chartTools{margin:-32px 0 8px}.chartTools select{max-width:130px}}

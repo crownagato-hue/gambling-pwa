@@ -27,7 +27,7 @@ const STORE_DATA_KEY="gambling-store-data-v1";
 const STORE_CUSTOM_KEY="gambling-store-custom-v1";
 let STORE_DATA={stores:[]};
 
-const APP_VERSION="8.30";
+const APP_VERSION="8.32";
 
 function loadMachineData(){
   try{
@@ -269,9 +269,9 @@ function renderStats(){let r=periodRange($("#period").value),es=entries.filter(e
    const targetEntries=selectedTarget?es.filter(e=>e.store===selectedTarget):[];
    renderStoreGroups(targetEntries,selectedTarget);
    $("#statsList").innerHTML=selectedTarget?`<p class='smallText neutral'>${escapeHtml(selectedTarget)} の集計結果です。</p>`:"<p class='smallText neutral'>対象の店舗を選択してください。</p>";
-   drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value));return;
+   drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar"));return;
  }
- let targetEntries=es;if(group==="machine"||group==="genre")targetEntries=selectedTarget?es.filter(e=>(group==="machine"?e.machine:e.genre)===selectedTarget):[];$("#detailStats").innerHTML=group==="machine"&&selectedTarget?machineCard(selectedTarget,targetEntries):group==="genre"&&selectedTarget?machineCard(selectedTarget,targetEntries):"";renderStatsList(targetEntries);drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value));}
+ let targetEntries=es;if(group==="machine"||group==="genre")targetEntries=selectedTarget?es.filter(e=>(group==="machine"?e.machine:e.genre)===selectedTarget):[];$("#detailStats").innerHTML=group==="machine"&&selectedTarget?machineCard(selectedTarget,targetEntries):group==="genre"&&selectedTarget?machineCard(selectedTarget,targetEntries):"";renderStatsList(targetEntries);drawChart($("#statsChart"),periodSeries(targetEntries,r,$("#period").value,$("#chartMode")?.value||"calendar"));}
 function groupedStats(list,keyFn){const m=new Map();for(const e of list){const k=keyFn(e);if(!m.has(k))m.set(k,[]);m.get(k).push(e)}return [...m.entries()].map(([key,arr])=>({key,arr,net:arr.reduce((a,e)=>a+net(e),0),invest:arr.reduce((a,e)=>a+invYen(e),0),ret:arr.reduce((a,e)=>a+retYen(e),0),count:arr.length})).sort((a,b)=>b.net-a.net)}
 function renderStoreGroups(es,target="") {
  const gs=groupedStats(es,e=>e.store?storeKey(e):"未選択");
@@ -295,20 +295,26 @@ function renderStatsList(es){
 }
 function updateAnalysisTargetOptions(es,group){const sel=$("#analysisTarget");if(!sel)return;const needs=group==="machine"||group==="genre"||group==="store";sel.classList.toggle("hiddenField",!needs);if(!needs){sel.innerHTML='<option value="">対象を選択</option>';return;}let vals;if(group==="store")vals=[...new Set(es.map(e=>e.store).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));else{const key=group==="machine"?"machine":"genre";vals=[...new Set(es.map(e=>e[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));}const prev=sel.value;sel.innerHTML='<option value="">対象を選択してください</option>'+vals.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join("");if(vals.includes(prev))sel.value=prev;else if(vals.length===1)sel.value=vals[0];}
 function machineCard(key,es){let n=es.map(net),wins=n.filter(x=>x>0).length,invest=es.reduce((a,e)=>a+invYen(e),0),ret=es.reduce((a,e)=>a+retYen(e),0),sum=n.reduce((a,x)=>a+x,0);let avg=es.length?sum/es.length:0,max=Math.max(...n,0),min=Math.min(...n,0);return `<div class="machineCard"><h3>${escapeHtml(key)}</h3><div class="statsGrid"><div><span>最高勝ち額</span><b class="pos">${yen(max)}</b></div><div><span>総投資</span><b>${yen(invest)}</b></div><div><span>平均収支</span><b class="${avg>=0?"pos":"neg"}">${yen(avg)}</b></div><div><span>最高負け額</span><b class="neg">${yen(min)}</b></div><div><span>総回収</span><b>${yen(ret)}</b></div><div><span>勝率</span><b>${es.length?(wins/es.length*100).toFixed(1):0}%</b></div></div></div>`}
-function periodSeries(es,r,type){
- // 表示単位（横軸ラベル）とデータ粒度を分離。すべての期間で収支データは日ごとに保持する。
+function periodSeries(es,r,type,mode="calendar"){
+ // 表示単位（横軸ラベル）とデータ粒度を分離。通常表示は期間内の全日、連続表示は記録日のみを描画する。
  if(!r||!r[0]||!r[1]||!es.length)return [];
  const map={};es.forEach(e=>map[e.date]=(map[e.date]||0)+net(e));
  const start=parseDate(r[0]),end=parseDate(r[1]);
- let cum=0,a=[];
- for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
-   const k=dateKey(d);cum+=map[k]||0;
+ let dates=[];
+ if(mode==="continuous"){
+   dates=[...new Set(es.map(e=>e.date).filter(Boolean))].sort();
+ }else{
+   for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1))dates.push(dateKey(d));
+ }
+ let cum=0;
+ return dates.map(k=>{
+   cum+=map[k]||0;
+   const d=parseDate(k);
    let label=`${d.getDate()}日`;
    if(type==="year") label=d.getDate()===1?`${d.getMonth()+1}月`:"";
    if(type==="all") label=d.getDate()===1&&d.getMonth()===0?`${d.getFullYear()}年`:"";
-   a.push({label,value:cum,date:k,tickUnit:type});
- }
- return a;
+   return {label,value:cum,date:k,tickUnit:type};
+ });
 }
 function chartScale(values){
  const maxValue=Math.max(0,...values),minValue=Math.min(0,...values);
@@ -406,8 +412,22 @@ function addEntryRow(data={}){
  div.querySelector('.removeRow').onclick=()=>{if(wrap.children.length<=1){alert('少なくとも1台は入力してください');return}div.remove();renumberRows();updateBatchTotal()};
  [investType,returnType].forEach(sel=>sel.oninput=sel.onchange=()=>{const input=sel===investType?div.querySelector('.rowInvest'):div.querySelector('.rowReturn');input.step=inputStep(sel.value);input.placeholder=inputPlaceholder(sel.value);const current=Number(input.value||0);if(sel.value==='cash' && input.dataset.lastType==='hold'){input.value=cashInputValue(current*Number(div.querySelector('.rowRate').value||1));}else if(sel.value==='hold' && input.dataset.lastType==='cash'){input.value=current*1000;}input.dataset.lastType=sel.value;updateRowPreview(div);updateBatchTotal()});
  div.querySelectorAll('.rowInvest,.rowReturn').forEach(x=>x.oninput=x.onchange=()=>{updateRowPreview(div);updateBatchTotal()});
- refreshRate();investType.querySelector('option[value="cash"]').textContent='現金（千円）';returnType.querySelector('option[value="cash"]').textContent='現金（千円）';div.querySelector('.rowInvest').dataset.lastType=investType.value;div.querySelector('.rowReturn').dataset.lastType=returnType.value;populate();
- if(data.machine){div.dataset.machine=data.machine;if(!machineOptions(genre.value).includes(data.machine)){custom.classList.remove('hiddenField');custom.value=data.machine;select.value=''}else{select.value=data.machine;custom.classList.add('hiddenField')}}
+ refreshRate();investType.querySelector('option[value="cash"]').textContent='現金（千円）';returnType.querySelector('option[value="cash"]').textContent='現金（千円）';div.querySelector('.rowInvest').dataset.lastType=investType.value;div.querySelector('.rowReturn').dataset.lastType=returnType.value;
+ // 編集時は既存の機種名を検索欄へ先に設定してから候補を生成する。
+ // これにより、検索欄が空のままselectに存在しない値を設定してしまう問題を防ぐ。
+ if(data.machine){
+   div.dataset.machine=data.machine;
+   if(machineOptions(genre.value).includes(data.machine)){
+     search.value=data.machine;
+     custom.value='';
+     custom.classList.add('hiddenField');
+   }else{
+     search.value='';
+     custom.classList.remove('hiddenField');
+     custom.value=data.machine;
+   }
+ }
+ populate();
  updateRowPreview(div);updateBatchTotal();
 }
 function renderRowRecent(div){const wrap=div.querySelector('.recentMachines'),rs=recentMachines();wrap.innerHTML=rs.length?rs.map(x=>`<button type="button" class="recentMachine" data-machine="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join(""):'<span class="neutral">まだありません</span>';wrap.querySelectorAll('.recentMachine').forEach(b=>b.onclick=()=>{div.dataset.machine=b.dataset.machine;const s=div.querySelector('.rowMachine'),c=div.querySelector('.rowCustom'),q=div.querySelector('.rowSearch');s.value=b.dataset.machine;q.value=b.dataset.machine;c.value='';c.classList.add('hiddenField');div.querySelector('.machineSuggestions').innerHTML='';updateRowPreview(div)})}
@@ -460,7 +480,7 @@ $("#deleteEntry").onclick=()=>{if(editingId&&confirm('この記録を削除し�
 $("#cancelDialog").onclick=$("#closeDialog").onclick=()=>$("#entryDialog").close();
 $("#prevMonth").onclick=()=>{viewDate.setMonth(viewDate.getMonth()-1);renderCalendar()};$("#nextMonth").onclick=()=>{viewDate.setMonth(viewDate.getMonth()+1);renderCalendar()};$("#todayBtn").onclick=()=>{viewDate=new Date();renderCalendar()};
 $("#reportPrev").onclick=()=>{reportDate.setDate(reportDate.getDate()-1);renderReport()};$("#reportNext").onclick=()=>{reportDate.setDate(reportDate.getDate()+1);renderReport()};
-$("#period").onchange=()=>{updatePeriodControls();renderStats()};$("#periodMonth").onchange=renderStats;$("#periodYear").onchange=renderStats;$("#group").onchange=()=>{renderStats();};$("#analysisTarget").onchange=renderStats;$("#detailSort").onchange=renderStats;
+$("#period").onchange=()=>{updatePeriodControls();renderStats()};$("#periodMonth").onchange=renderStats;$("#periodYear").onchange=renderStats;$("#group").onchange=()=>{renderStats();};$("#analysisTarget").onchange=renderStats;$("#detailSort").onchange=renderStats;$("#chartMode").onchange=renderStats;
 $$('.tab').forEach(b=>b.onclick=()=>{switchPage(b.dataset.page);renderAll();if(b.dataset.page==='settings')updateMachineUpdatedUI()});
 $("#updateMachines").onclick=()=>updateMachineData(false);$("#updateStores").onclick=async()=>{const ok=await updateStoreData(false);alert(ok?"店舗データを更新しました。次回の入力から最新店舗が候補に表示されます。":"店舗データを更新できませんでした。現在の保存済み店舗データを使用します。");};$("#exportData").onclick=exportBackup;$("#importData").onchange=e=>importBackup(e.target.files[0]);
 $("#themeDark").onclick=()=>applyTheme('dark');$("#themeLight").onclick=()=>applyTheme('light');
